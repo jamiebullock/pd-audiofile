@@ -11,6 +11,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ matrix.os }} / miniaudio impl ${{ matrix.miniaudio_implementation }}
@@ -25,9 +28,12 @@ jobs:
 
     env:
       PD_VERSION: 0.55-2
+      PD_MSW_SHA256: f66025c3f0e0a778638c0b9b1a091e60f0c5ebaced70001d76f202943c1ce062
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # ffmpeg widens the fixture set to FLAC, MP3 and Vorbis. Without it the
       # tests skip those rather than fail.
@@ -49,12 +55,19 @@ jobs:
 
       # Pd's headers alone are not enough on Windows: a DLL cannot leave Pd's
       # symbols undefined, so the binary distribution is fetched for pd.lib.
+      # The smoke test then runs the pd.exe out of this archive, so it is
+      # fetched over TLS and checked against its hash before anything in it
+      # is unpacked.
       - name: Fetch Pd for Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $url = "http://msp.ucsd.edu/Software/pd-$env:PD_VERSION.msw.zip"
+          $url = "https://msp.ucsd.edu/Software/pd-$env:PD_VERSION.msw.zip"
           Invoke-WebRequest -Uri $url -OutFile pd.zip
+          $actual = (Get-FileHash pd.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $env:PD_MSW_SHA256) {
+            throw "pd-$env:PD_VERSION.msw.zip is $actual, expected $env:PD_MSW_SHA256"
+          }
           Expand-Archive pd.zip -DestinationPath pd-msw
           $root = (Get-ChildItem pd-msw -Directory | Select-Object -First 1).FullName
           "PD_INCLUDE_DIR=$root/src"     | Out-File -Append $env:GITHUB_ENV
@@ -100,6 +113,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install ffmpeg
         run: |
