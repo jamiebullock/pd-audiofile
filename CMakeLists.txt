@@ -8,18 +8,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-# C11 for <stdatomic.h>, which is what the audio thread and the control thread
-# share, and for the assertions that the atomics it uses are lock-free.
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-if(MSVC)
-    # MSVC's C11 atomics need asking for by name; they arrived in Visual Studio
-    # 2022 17.5.
-    add_compile_options(/experimental:c11atomics)
-endif()
 
 include(FetchContent)
 
@@ -219,7 +211,7 @@ endif()
 if(AUDIOFILE_BUILD_TESTS)
     enable_testing()
 
-    # nanosleep and pthreads are POSIX, and the build asks for standard C.
+    # nanosleep is POSIX, and the build asks for standard C.
     if(UNIX)
         set(AUDIOFILE_TEST_DEFINES _POSIX_C_SOURCE=200809L)
     endif()
@@ -256,21 +248,6 @@ if(AUDIOFILE_BUILD_TESTS)
     # require.
     add_test(NAME core COMMAND test_core "${AUDIOFILE_FIXTURE_DIR}")
     set_tests_properties(core PROPERTIES SKIP_RETURN_CODE 77)
-
-    # Drives the control thread and the audio thread at once. Meaningful under
-    # ThreadSanitizer; on its own it checks only that the two coexist.
-    add_executable(test_concurrency tests/test_concurrency.c)
-    target_link_libraries(test_concurrency PRIVATE audiofile_core)
-    target_include_directories(test_concurrency PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-    target_compile_definitions(test_concurrency PRIVATE ${AUDIOFILE_TEST_DEFINES})
-    if(NOT MSVC)
-        target_compile_options(test_concurrency PRIVATE -Wall -Wextra)
-    endif()
-    if(Python3_Interpreter_FOUND)
-        add_dependencies(test_concurrency fixtures)
-    endif()
-    add_test(NAME concurrency COMMAND test_concurrency "${AUDIOFILE_FIXTURE_DIR}")
-    set_tests_properties(concurrency PROPERTIES SKIP_RETURN_CODE 77)
 
     # The script exits 77, a skip, when it cannot find a Pd to run.
     if(Python3_Interpreter_FOUND)

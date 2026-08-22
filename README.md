@@ -94,9 +94,8 @@ Rules:
 
 ## Building
 
-C11 throughout, for `<stdatomic.h>`. Any compiler with C11 atomics will do;
-MSVC needs Visual Studio 2022 17.5 or later and `/experimental:c11atomics`,
-which the build passes for you.
+C99 throughout, so any toolchain from the last fifteen years will do. Nothing
+else is needed beyond the two dependencies below.
 
 ```sh
 cmake -S . -B build
@@ -168,8 +167,7 @@ cmake -S . -B build -DAUDIOFILE_USE_HOST_MINIAUDIO=ON \
 each fixture, a file read end to end against its frame count, the phase of the
 block after a seek, output length against speed and sample-rate conversion, a
 forced stall reported once, and the error paths for a missing, malformed or
-truncated file. `tests/test_concurrency.c` drives control messages against a
-second thread pulling blocks; it is meant for ThreadSanitizer.
+truncated file.
 
 Fixtures are generated rather than committed, by `tests/make_fixtures.py`: a
 441 Hz sine at 44100 Hz, 100 frames per cycle, as WAV PCM-16, WAV float-32, 16-
@@ -183,9 +181,9 @@ patch sends `open ..., run 1` as a single message with no gap. It skips itself
 when no Pd can be found; point it at one with `-DPD_EXECUTABLE=` or the `PD`
 environment variable.
 
-CI builds macOS, Linux and Windows both ways round on
-`AUDIOFILE_USE_HOST_MINIAUDIO`, and runs the core and concurrency tests
-under ThreadSanitizer and under AddressSanitizer with UBSan.
+CI builds macOS, Linux and Windows, adds one Linux job with
+`AUDIOFILE_USE_HOST_MINIAUDIO`, and runs the core tests under ThreadSanitizer
+and under AddressSanitizer with UBSan.
 
 ## Structure
 
@@ -198,13 +196,14 @@ src/audiofile_setup.c      the library setup
 src/af_pdpath.h            path resolution against the patch and search path
 src/af_miniaudio.h         the one place miniaudio.h is included
 src/miniaudio_impl.c       compiles miniaudio's implementation
-tests/af_platform.h        a sleep and a thread, for the tests
+tests/af_platform.h        a millisecond sleep, for the tests
 ```
 
 `audiofile_core` includes no `m_pd.h`, so the tests build and run without Pd.
 miniaudio's resource manager reads ahead from disk on a thread of its own, and
 the DSP callback pulls finished frames: it never opens files, allocates, locks
-or blocks.
+or blocks. One thread owns a stream -- Pd's scheduler runs messages and the
+perform routine, and a libpd host serialises its calls as libpd requires.
 
 ## Technical notes
 
@@ -269,34 +268,14 @@ one to three of them.
 
 ### Reports
 
-`eof` and `underflow` are edges the audio thread raises and the Pd clock
-callback takes, in one word read with an atomic exchange. A load followed by a
-store would drop an edge raised between the two.
+`eof` and `underflow` are edges the perform routine raises in one word and the
+Pd clock callback takes, which is why the perform routine sets a clock at all:
+`outlet_` calls are not safe from it.
 
 An empty buffer means one of two opposite things. Until the stream has read
 enough ahead to say it is running, after a fresh `open` or a seek into a region
 not yet on disk, it is filling up, which is not a dropout and is not reported.
 After that it is the buffer running dry, reported once per stall.
-
-### Handing the sound between threads
-
-Closing a file, opening another and changing Pd's sample rate each destroy
-something the audio thread may be reading. Each takes the sound out of reach,
-then waits for the block the audio thread may be in; the audio thread says it is
-in a block and waits for nothing. miniaudio detaches its own nodes the same way.
-
-The sample rate is the heaviest of the three: the engine's rate is fixed when it
-is created, so the engine is rebuilt and the file reopened where it was.
-
-### Memory ordering
-
-The atomics take the default memory order: a store that publishes what preceded
-it and a load that sees it. Acquire/release would also serve, and measured at
-about 0.001% of a core on this workload.
-
-Lock-freedom is asserted rather than assumed: `_Static_assert` on
-`ATOMIC_BOOL_LOCK_FREE`, `ATOMIC_LLONG_LOCK_FREE` and `ATOMIC_POINTER_LOCK_FREE`
-fails the build on a platform that would put a lock behind them.
 
 ## Licence
 

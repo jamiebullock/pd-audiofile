@@ -1,11 +1,10 @@
 /* audiofile_core.h -- opening sound files and playing them. Includes no Pd
  * header, so the tests can have it without one.
  *
- * Two threads share a stream. The control thread sends messages, takes the
- * events, and may block briefly closing a file; the audio thread calls
- * af_stream_read and af_stream_pending, and nothing else, and never blocks.
- * Reading ahead from disk is miniaudio's own thread, which neither waits
- * for.
+ * One thread owns a stream: Pd runs messages and the perform routine on its
+ * scheduler thread, and a libpd host has to serialise its calls the same way
+ * libpd itself requires. Reading ahead from disk happens on miniaudio's own
+ * thread, which this code never waits for.
  *
  * Part of pd-audiofile. SPDX-License-Identifier: Zlib
  */
@@ -51,8 +50,6 @@ af_status af_stream_new(af_stream **out, uint32_t channels,
                         double out_samplerate);
 void      af_stream_free(af_stream *s);
 
-/* --- control thread --- */
-
 /* Opens `path` and reports its header in `info`. Leaves the stream stopped at
  * frame 0, replacing any file already open. A failed open changes nothing. */
 af_status af_stream_open(af_stream *s, const char *path, af_info *info);
@@ -75,21 +72,19 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate);
 af_status af_stream_seek_seconds(af_stream *s, double seconds);
 af_status af_stream_seek_frames(af_stream *s, uint64_t frame);
 
-/* Where the play head is. Safe to call while the audio thread is reading. */
+/* Where the play head is. */
 uint64_t af_stream_tell_frames(af_stream *s);
 double   af_stream_tell_seconds(af_stream *s);
 
-/* --- audio thread --- */
-
 /* Writes up to `frames` interleaved frames into `dst` and returns how many;
- * the caller silences the remainder. Allocates nothing and never blocks. */
+ * the caller silences the remainder. Meant for a perform routine: it
+ * allocates nothing, takes no lock and never blocks. */
 size_t af_stream_read(af_stream *s, float *dst, size_t frames);
 
 /* Nonzero when there is an event waiting, without consuming it. */
 int af_stream_pending(af_stream *s);
 
-/* Takes every event raised since the last call; each is raised once. Safe
- * from either thread, and meant for the control one. */
+/* Takes every event raised since the last call; each is raised once. */
 typedef enum {
     AF_EVENT_EOF       = 1 << 0,
     AF_EVENT_UNDERFLOW = 1 << 1

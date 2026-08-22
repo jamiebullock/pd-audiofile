@@ -8,21 +8,9 @@
 #include "audiofile_core.h"
 #include "af_miniaudio.h"
 
-#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Zero means never lock-free, which the audio thread could not use. MSVC
- * answers 1 for types it does implement with interlocked instructions. */
-_Static_assert(ATOMIC_BOOL_LOCK_FREE != 0,
-               "af_stream needs lock-free bool atomics");
-_Static_assert(ATOMIC_LLONG_LOCK_FREE != 0,
-               "af_stream needs lock-free 64-bit atomics");
-_Static_assert(ATOMIC_POINTER_LOCK_FREE != 0,
-               "af_stream needs lock-free pointer atomics");
-_Static_assert(sizeof(double) == sizeof(long long),
-               "af_stream's atomic doubles are 64-bit, like the assertion above");
 
 /* Also sizes the node caches a seek plays through, so one Pd block of stale
  * audio rather than the 480-frame default. */
@@ -44,11 +32,7 @@ struct af_stream {
     ma_engine engine;
     bool      engine_ready;
 
-    /* `sound` is the control thread's; `playing` is what the audio thread may
-     * touch, and `readers` is how the control thread knows it has let go. */
     ma_sound *sound;
-    ma_sound *_Atomic playing;
-    _Atomic int       readers;
 
     char    *path;
     af_info  info;
@@ -56,27 +40,27 @@ struct af_stream {
     /* The data source always loops, so the pages either side of the loop
      * point are filled knowing they wrap, and a file played once is stopped
      * here by counting `length` down. False when no length is known. */
-    _Atomic bool engine_loops;
+    bool engine_loops;
 
     /* In the engine's frames; 0 when the container records no length. */
-    _Atomic uint64_t length;
+    uint64_t length;
 
-    _Atomic bool live;          /* a file is open */
-    _Atomic bool running;
-    _Atomic bool loop;
+    bool live;                  /* a file is open */
+    bool running;
+    bool loop;
 
     /* What the caller has been handed, in the engine's frames. The sound's own
      * cursor is the read head, which runs ahead of it. */
-    _Atomic double position;
+    double position;
 
     /* Set by a seek, cleared by the block that seek is applied in. */
-    _Atomic bool settling;
+    bool settling;
 
-    _Atomic bool eof_seen;
-    _Atomic bool starved;
-    _Atomic bool primed;
+    bool eof_seen;
+    bool starved;
+    bool primed;
 
-    _Atomic unsigned events;
+    unsigned events;
 };
 
 const char *af_status_string(af_status status)
@@ -250,12 +234,8 @@ static void af_free_sound(ma_sound *sound)
     free(sound);
 }
 
-/* Control thread: takes the sound out of reach, then waits for the block the
- * audio thread may be in. The audio thread never waits. */
 static void af_retire_sound(af_stream *s)
 {
-    atomic_store(&s->playing, NULL);
-    while (atomic_load(&s->readers) != 0) { /* at most one block */ }
     af_free_sound(s->sound);
     s->sound = NULL;
 }
@@ -311,10 +291,10 @@ void af_stream_free(af_stream *s)
 
 static void af_forget_position(af_stream *s, double position)
 {
-    atomic_store(&s->position, position);
-    atomic_store(&s->eof_seen, false);
-    atomic_store(&s->starved, false);
-    atomic_store(&s->primed, false);
+    s->position = position;
+    s->eof_seen = false;
+    s->starved = false;
+    s->primed = false;
 }
 
 static bool af_all_zero(const float *frames, size_t count)
@@ -372,7 +352,7 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     ma_sound_get_length_in_pcm_frames(sound, &length);
     if (length == 0) {
         /* Nothing to count down to, so the end has to come from the decoder. */
-        const bool looping = atomic_load(&s->loop);
+        const bool looping = s->loop;
 
         af_free_sound(sound);
         sound  = NULL;
@@ -389,20 +369,19 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
         return AF_ERR_MEMORY;
     }
 
-    atomic_store(&s->running, false);
-    atomic_store(&s->live, false);
+    s->running = false;
+    s->live = false;
     af_retire_sound(s);
 
     s->sound = sound;
     s->info  = file_info;
-    atomic_store(&s->engine_loops, length > 0);
-    atomic_store(&s->length, (uint64_t)length);
+    s->engine_loops = length > 0;
+    s->length = (uint64_t)length;
     free(s->path);
     s->path = path_copy;
     af_forget_position(s, 0.0);
 
-    atomic_store(&s->live, true);
-    atomic_store(&s->playing, s->sound);
+    s->live = true;
 
     if (info != NULL) *info = file_info;
     return AF_OK;
@@ -421,13 +400,13 @@ void af_stream_close(af_stream *s)
 {
     if (s == NULL) return;
 
-    atomic_store(&s->running, false);
-    atomic_store(&s->live, false);
+    s->running = false;
+    s->live = false;
     af_retire_sound(s);
 
     s->info = af_info_none;
-    atomic_store(&s->length, 0);
-    atomic_store(&s->engine_loops, false);
+    s->length = 0;
+    s->engine_loops = false;
     free(s->path);
     s->path = NULL;
     af_forget_position(s, 0.0);
@@ -437,7 +416,7 @@ void af_stream_set_running(af_stream *s, int running)
 {
     if (s == NULL) return;
 
-    atomic_store(&s->running, running != 0);
+    s->running = running != 0;
     if (s->sound == NULL) return;
 
     /* Starting a sound that reached the end rewinds it, which is not what
@@ -453,8 +432,8 @@ void af_stream_set_loop(af_stream *s, int loop)
 {
     if (s == NULL) return;
 
-    atomic_store(&s->loop, loop != 0);
-    if (s->sound != NULL && !atomic_load(&s->engine_loops)) {
+    s->loop = loop != 0;
+    if (s->sound != NULL && !s->engine_loops) {
         ma_sound_set_looping(s->sound, (loop != 0) ? MA_TRUE : MA_FALSE);
     }
 }
@@ -481,13 +460,13 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
     if ((uint32_t)(samplerate + 0.5) == (uint32_t)(s->out_rate + 0.5)) return;
 
     position    = af_stream_tell_frames(s);
-    was_running = atomic_load(&s->running);
+    was_running = s->running;
     path        = s->path;
     s->path     = NULL;         /* the reopen below takes its own copy */
 
     af_engine_stop(s);
-    atomic_store(&s->live, false);
-    atomic_store(&s->length, 0);
+    s->live = false;
+    s->length = 0;
     s->info = af_info_none;
 
     s->out_rate = samplerate;
@@ -516,21 +495,21 @@ af_status af_stream_seek_frames(af_stream *s, uint64_t frame)
 
     if (s->info.frames > 0 && frame > s->info.frames) frame = s->info.frames;
     target = af_to_engine_frames(s, frame);
-    length = atomic_load(&s->length);
+    length = s->length;
     if (length > 0 && target > length) target = length;
 
     /* A sound at the end ignores a seek. Starting it clears that, at the cost
      * of a rewind the seek below replaces. */
     if (ma_sound_at_end(s->sound)) {
         ma_sound_start(s->sound);
-        if (!atomic_load(&s->running)) ma_sound_stop(s->sound);
+        if (!s->running) ma_sound_stop(s->sound);
     }
 
     if (ma_sound_seek_to_pcm_frame(s->sound, target) != MA_SUCCESS) {
         return AF_ERR_SEEK;
     }
     af_forget_position(s, (double)target);
-    atomic_store(&s->settling, true);
+    s->settling = true;
 
     return AF_OK;
 }
@@ -554,50 +533,53 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
 
 uint64_t af_stream_tell_frames(af_stream *s)
 {
-    if (s == NULL || !atomic_load(&s->live)) return 0;
-    return af_to_file_frames(s, (uint64_t)(atomic_load(&s->position) + 0.5));
+    if (s == NULL || !s->live) return 0;
+    return af_to_file_frames(s, (uint64_t)(s->position + 0.5));
 }
 
 double af_stream_tell_seconds(af_stream *s)
 {
-    if (s == NULL || !atomic_load(&s->live)) return 0.0;
+    if (s == NULL || !s->live) return 0.0;
     if (s->out_rate <= 0.0) return 0.0;
-    return atomic_load(&s->position) / s->out_rate;
+    return s->position / s->out_rate;
 }
 
 int af_stream_pending(af_stream *s)
 {
-    return (s != NULL && atomic_load(&s->events) != 0) ? 1 : 0;
+    return (s != NULL && s->events != 0) ? 1 : 0;
 }
 
-/* An exchange, because a load and a store would drop an edge raised between
- * them. */
 unsigned af_stream_take_events(af_stream *s)
 {
-    return (s != NULL) ? atomic_exchange(&s->events, 0u) : 0u;
+    unsigned events;
+
+    if (s == NULL) return 0u;
+    events = s->events;
+    s->events = 0u;
+    return events;
 }
 
 static void af_raise(af_stream *s, unsigned event)
 {
-    atomic_fetch_or(&s->events, event);
+    s->events |= event;
 }
 
 static void af_report_eof(af_stream *s)
 {
-    if (!atomic_exchange(&s->eof_seen, true)) af_raise(s, AF_EVENT_EOF);
+    if (!s->eof_seen) { s->eof_seen = true; af_raise(s, AF_EVENT_EOF); }
 }
 
 /* An empty buffer before the stream has filled after a seek is the buffer
  * filling, which is not a dropout. */
 static void af_report_underflow(af_stream *s)
 {
-    if (atomic_load(&s->primed) && !atomic_exchange(&s->starved, true)) {
+    if (s->primed && !s->starved) {
+        s->starved = true;
         af_raise(s, AF_EVENT_UNDERFLOW);
     }
 }
 
-/* Audio thread, with the sound held open by the caller below. */
-static size_t af_read_held(af_stream *s, ma_sound *sound, float *dst, size_t frames)
+static size_t af_read_sound(af_stream *s, ma_sound *sound, float *dst, size_t frames)
 {
     double    per_out, position;
     uint64_t  length, available;
@@ -616,11 +598,11 @@ static size_t af_read_held(af_stream *s, ma_sound *sound, float *dst, size_t fra
     per_out = (double)ma_sound_get_pitch(sound);
     if (per_out <= 0.0) per_out = 1.0;
 
-    position = atomic_load(&s->position);
-    length   = atomic_load(&s->length);
+    position = s->position;
+    length   = s->length;
     want     = frames;
 
-    if (!atomic_load(&s->loop) && length > 0) {
+    if (!s->loop && length > 0) {
         double remaining = (double)length - position;
         double out_left  = (remaining > 0.0) ? remaining / per_out : 0.0;
 
@@ -639,26 +621,27 @@ static size_t af_read_held(af_stream *s, ma_sound *sound, float *dst, size_t fra
     }
 
     if (want > 0) {
-        const uint64_t before = af_source_cursor(sound);
+        const uint64_t before   = af_source_cursor(sound);
+        const bool     settling = s->settling;
+
+        s->settling = false;
 
         ma_engine_read_pcm_frames(&s->engine, dst, want, &read);
 
         /* Silence the file did not produce is a gap: reporting it as no
          * frames stops the position advancing over frames nobody heard.
          * Silence in the file moves the cursor like anything else. */
-        if (read > 0 &&
-            (atomic_exchange(&s->settling, false) ||
-             af_source_cursor(sound) == before) &&
+        if (read > 0 && (settling || af_source_cursor(sound) == before) &&
             af_all_zero(dst, (size_t)read * s->channels))
         {
             return 0;
         }
     }
 
-    if (read == frames) atomic_store(&s->primed, true);
+    if (read == frames) s->primed = true;
 
     position += (double)read * per_out;
-    if (atomic_load(&s->loop) && length > 0) {
+    if (s->loop && length > 0) {
         while (position >= (double)length) position -= (double)length;
     }
 
@@ -666,7 +649,7 @@ static size_t af_read_held(af_stream *s, ma_sound *sound, float *dst, size_t fra
         if (at_end || ma_sound_at_end(sound)) {
             /* The data source loops, so the play head has to be put back on
              * the end it just passed. */
-            if (at_end && atomic_load(&s->engine_loops)) {
+            if (at_end && s->engine_loops) {
                 position = (double)length;
                 ma_sound_seek_to_pcm_frame(sound, length);
             }
@@ -675,25 +658,17 @@ static size_t af_read_held(af_stream *s, ma_sound *sound, float *dst, size_t fra
             af_report_underflow(s);
         }
     } else {
-        atomic_store(&s->starved, false);
+        s->starved = false;
     }
 
-    atomic_store(&s->position, position);
+    s->position = position;
     return (size_t)read;
 }
 
 size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 {
-    ma_sound *sound;
-    size_t    read;
-
     if (s == NULL || dst == NULL || frames == 0) return 0;
-    if (!atomic_load(&s->live) || !atomic_load(&s->running)) return 0;
+    if (!s->live || !s->running) return 0;
 
-    atomic_fetch_add(&s->readers, 1);
-    sound = atomic_load(&s->playing);
-    read  = af_read_held(s, sound, dst, frames);
-    atomic_fetch_sub(&s->readers, 1);
-
-    return read;
+    return af_read_sound(s, s->sound, dst, frames);
 }
