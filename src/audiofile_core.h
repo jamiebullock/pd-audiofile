@@ -1,10 +1,11 @@
 /* audiofile_core.h -- opening sound files and playing them. Includes no Pd
  * header, so the tests can have it without one.
  *
- * Two threads share a stream. The control thread sends messages and may block
- * briefly closing a file; the audio thread calls af_stream_read and
- * af_stream_pending, and nothing else, and never blocks. Reading ahead from
- * disk is miniaudio's own thread, which neither waits for.
+ * Two threads share a stream. The control thread sends messages, takes the
+ * events, and may block briefly closing a file; the audio thread calls
+ * af_stream_read and af_stream_pending, and nothing else, and never blocks.
+ * Reading ahead from disk is miniaudio's own thread, which neither waits
+ * for.
  *
  * Part of pd-audiofile. SPDX-License-Identifier: Zlib
  */
@@ -87,7 +88,8 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames);
 /* Nonzero when there is an event waiting, without consuming it. */
 int af_stream_pending(af_stream *s);
 
-/* Takes every event raised since the last call; each is raised once. */
+/* Takes every event raised since the last call; each is raised once. Safe
+ * from either thread, and meant for the control one. */
 typedef enum {
     AF_EVENT_EOF       = 1 << 0,
     AF_EVENT_UNDERFLOW = 1 << 1

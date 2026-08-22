@@ -24,7 +24,7 @@ The `af` prefix follows macOS's `afinfo` and `afplay`.
 
 Both classes are in one binary, so load the library rather than the objects:
 
-```
+```pd
 [declare -lib audiofile]
 ```
 
@@ -48,7 +48,7 @@ takes; the reply is four elements rather than seven.
 
 ### `[af.play~]`
 
-```
+```pd
 [af.play~ <channels>]
 ```
 
@@ -98,7 +98,7 @@ C11 throughout, for `<stdatomic.h>`. Any compiler with C11 atomics will do;
 MSVC needs Visual Studio 2022 17.5 or later and `/experimental:c11atomics`,
 which the build passes for you.
 
-```
+```sh
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
@@ -108,7 +108,7 @@ The build fetches what it cannot find, at pinned versions: Pure Data 0.55-2 for
 `m_pd.h`, and miniaudio 0.11.25. Point it at copies you already have to skip
 that:
 
-```
+```sh
 cmake -S . -B build \
   -DPD_INCLUDE_DIR=/Applications/Pd-0.55-2.app/Contents/Resources/src \
   -DMINIAUDIO_INCLUDE_DIR=/path/to/miniaudio
@@ -129,7 +129,7 @@ alone does not provide: add `-DPD_LIBRARY=<path to pd.lib>`.
 
 ### Installing
 
-```
+```sh
 cmake --install build --prefix ~/Documents/Pd/externals
 ```
 
@@ -157,7 +157,7 @@ and `ma_engine`, `MA_NO_DEVICE_IO` alone by five members, so a translation unit
 that disagrees writes fields at the wrong offsets. That is not a link error, so
 `af_stream_new` checks at run time and answers `config` instead.
 
-```
+```sh
 cmake -S . -B build -DAUDIOFILE_MINIAUDIO_IMPLEMENTATION=OFF \
   -DAUDIOFILE_MINIAUDIO_DEFINES="MA_NO_DEVICE_IO;MA_NO_GENERATION;MA_NO_ENCODING"
 ```
@@ -189,7 +189,7 @@ under ThreadSanitizer and under AddressSanitizer with UBSan.
 
 ## Structure
 
-```
+```text
 src/audiofile_core.c       opening files, and playing them through miniaudio
 src/audiofile_core.h       its interface, and the thread contract
 src/af_info.c              the [af.info] class

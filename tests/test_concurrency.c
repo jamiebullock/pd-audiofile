@@ -45,6 +45,7 @@ int main(int argc, char **argv)
     af_thread   audio;
     long        blocks, frames;
     int         i;
+    int         reopen_failures = 0;
 
     snprintf(path, sizeof(path), "%s/sine_mono_44100_s16.wav", dir);
 
@@ -74,7 +75,7 @@ int main(int argc, char **argv)
 
         if (i % 97 == 0) {
             af_stream_close(s);
-            af_stream_open(s, path, NULL);
+            if (af_stream_open(s, path, NULL) != AF_OK) reopen_failures++;
             af_stream_set_running(s, 1);
         }
         if (i % 211 == 0) {
@@ -85,7 +86,7 @@ int main(int argc, char **argv)
          * audio thread and reopens the file. */
         if (i % 307 == 0) {
             af_stream_set_output_samplerate(s, (i % 614 == 0) ? 48000.0 : 44100.0);
-            af_stream_open(s, path, NULL);
+            if (af_stream_open(s, path, NULL) != AF_OK) reopen_failures++;
             af_stream_set_running(s, 1);
         }
     }
@@ -96,6 +97,11 @@ int main(int argc, char **argv)
     blocks = atomic_load(&g_blocks);
     frames = atomic_load(&g_frames);
     af_stream_free(s);
+
+    if (reopen_failures > 0) {
+        printf("FAIL  %d reopens failed\n", reopen_failures);
+        return 1;
+    }
 
     if (blocks <= 0) {
         printf("FAIL  the audio thread produced no blocks\n");

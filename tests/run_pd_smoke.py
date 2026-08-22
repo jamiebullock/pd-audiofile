@@ -123,6 +123,13 @@ def main(argv):
             return 1
 
     print(log)
+
+    # The patch quits Pd itself, so a non-zero status is a crash on the way
+    # out, which is one of the things loading a library here is meant to catch.
+    if done.returncode != 0:
+        print("Pd exited with status %d" % done.returncode, file=sys.stderr)
+        return 1
+
     print("checking the smoke patch's output:")
 
     failed = False
