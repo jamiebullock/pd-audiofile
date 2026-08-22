@@ -9,10 +9,18 @@
 #define AUDIOFILE_VERSION "0.1.0"
 #endif
 
+/* Pd looks this symbol up by name in the loaded binary, and a DLL exports
+ * nothing unless it says so. m_pd.h's EXTERN is dllimport out here. */
+#if defined(_WIN32)
+#define AF_LIBRARY_ENTRY __declspec(dllexport)
+#else
+#define AF_LIBRARY_ENTRY
+#endif
+
 void af_info_setup(void);
 void af_play_tilde_setup(void);
 
-void audiofile_setup(void)
+AF_LIBRARY_ENTRY void audiofile_setup(void)
 {
     af_info_setup();
     af_play_tilde_setup();
