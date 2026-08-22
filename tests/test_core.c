@@ -7,11 +7,6 @@
  * Part of pd-audiofile. SPDX-License-Identifier: Zlib
  */
 
-/* MSVC hides M_PI behind this. */
-#ifndef _USE_MATH_DEFINES
-#define _USE_MATH_DEFINES
-#endif
-
 #include "audiofile_core.h"
 #include "af_platform.h"
 
@@ -25,6 +20,10 @@
 #define FIXTURE_FRAMES  22050
 #define FIXTURE_PERIOD  100.0     /* frames per cycle of the fixture sine */
 #define FIXTURE_AMP     0.5
+
+/* M_PI is not in standard C, and which compilers offer it depends on how the
+ * build asks for its language. */
+#define AF_PI           3.14159265358979323846
 
 static const char *g_dir = "fixtures";
 static int g_pass, g_fail, g_skip;
@@ -143,7 +142,7 @@ static float *scratch_buffer(size_t frames, size_t channels)
 
 static double expected_sample(double frame)
 {
-    return FIXTURE_AMP * sin(2.0 * M_PI * frame / FIXTURE_PERIOD);
+    return FIXTURE_AMP * sin(2.0 * AF_PI * frame / FIXTURE_PERIOD);
 }
 
 /* The linear resampler holds a frame of history and primes itself with a
