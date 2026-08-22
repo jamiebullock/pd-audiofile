@@ -8,7 +8,13 @@
  */
 
 #include "audiofile_core.h"
-#include "af_platform.h"
+
+#if defined(_WIN32)
+    #define WIN32_LEAN_AND_MEAN
+    #include <windows.h>
+#else
+    #include <time.h>
+#endif
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -24,6 +30,22 @@
 /* M_PI is not in standard C, and which compilers offer it depends on how the
  * build asks for its language. */
 #define AF_PI           3.14159265358979323846
+
+#if defined(_WIN32)
+
+static void af_sleep_ms(int ms) { Sleep((DWORD)ms); }
+
+#else
+
+static void af_sleep_ms(int ms)
+{
+    struct timespec ts;
+    ts.tv_sec  = ms / 1000;
+    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+    nanosleep(&ts, NULL);
+}
+
+#endif
 
 static const char *g_dir = "fixtures";
 static int g_pass, g_fail, g_skip;
@@ -812,8 +834,8 @@ static void test_info_describes_the_file(void)
     af_stream_free(s);
 }
 
-/* The audio thread can be inside a block when a file is replaced or the object
- * goes away; both have to wait for it before releasing anything. */
+/* miniaudio's job thread can be mid-read when a file is replaced or the object
+ * goes away, and ma_sound_uninit has to survive that. */
 static void test_teardown_while_playing(void)
 {
     af_stream *s;

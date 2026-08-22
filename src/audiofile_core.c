@@ -27,7 +27,7 @@ static const af_info af_info_none = { 0.0, 0, 0, "unknown" };
 struct af_stream {
     uint32_t channels;
     double   out_rate;
-    double   speed;         /* control thread; the sound carries it as pitch */
+    double   speed;         /* the sound carries it as its pitch */
 
     ma_engine engine;
     bool      engine_ready;
@@ -45,7 +45,6 @@ struct af_stream {
     /* In the engine's frames; 0 when the container records no length. */
     uint64_t length;
 
-    bool live;                  /* a file is open */
     bool running;
     bool loop;
 
@@ -370,7 +369,6 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     }
 
     s->running = false;
-    s->live = false;
     af_retire_sound(s);
 
     s->sound = sound;
@@ -380,8 +378,6 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     free(s->path);
     s->path = path_copy;
     af_forget_position(s, 0.0);
-
-    s->live = true;
 
     if (info != NULL) *info = file_info;
     return AF_OK;
@@ -401,7 +397,6 @@ void af_stream_close(af_stream *s)
     if (s == NULL) return;
 
     s->running = false;
-    s->live = false;
     af_retire_sound(s);
 
     s->info = af_info_none;
@@ -465,7 +460,6 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
     s->path     = NULL;         /* the reopen below takes its own copy */
 
     af_engine_stop(s);
-    s->live = false;
     s->length = 0;
     s->info = af_info_none;
 
@@ -533,13 +527,13 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
 
 uint64_t af_stream_tell_frames(af_stream *s)
 {
-    if (s == NULL || !s->live) return 0;
+    if (s == NULL || s->sound == NULL) return 0;
     return af_to_file_frames(s, (uint64_t)(s->position + 0.5));
 }
 
 double af_stream_tell_seconds(af_stream *s)
 {
-    if (s == NULL || !s->live) return 0.0;
+    if (s == NULL || s->sound == NULL) return 0.0;
     if (s->out_rate <= 0.0) return 0.0;
     return s->position / s->out_rate;
 }
@@ -579,15 +573,19 @@ static void af_report_underflow(af_stream *s)
     }
 }
 
-static size_t af_read_sound(af_stream *s, ma_sound *sound, float *dst, size_t frames)
+size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 {
+    ma_sound *sound;
     double    per_out, position;
     uint64_t  length, available;
     size_t    want;
     bool      at_end = false;
     ma_uint64 read = 0;
 
-    if (sound == NULL) return 0;
+    if (s == NULL || dst == NULL || frames == 0) return 0;
+    if (s->sound == NULL || !s->running) return 0;
+
+    sound = s->sound;
 
     if (ma_sound_at_end(sound)) {
         af_report_eof(s);
@@ -663,12 +661,4 @@ static size_t af_read_sound(af_stream *s, ma_sound *sound, float *dst, size_t fr
 
     s->position = position;
     return (size_t)read;
-}
-
-size_t af_stream_read(af_stream *s, float *dst, size_t frames)
-{
-    if (s == NULL || dst == NULL || frames == 0) return 0;
-    if (!s->live || !s->running) return 0;
-
-    return af_read_sound(s, s->sound, dst, frames);
 }

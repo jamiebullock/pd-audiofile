@@ -127,6 +127,7 @@ if(AUDIOFILE_USE_HOST_MINIAUDIO)
 endif()
 
 if(NOT WIN32)
+    # miniaudio reads ahead on a thread of its own; nothing here starts one.
     find_package(Threads REQUIRED)
     target_link_libraries(audiofile_core PUBLIC Threads::Threads)
 endif()
@@ -222,7 +223,6 @@ if(AUDIOFILE_BUILD_TESTS)
 
     add_executable(test_core tests/test_core.c)
     target_link_libraries(test_core PRIVATE audiofile_core)
-    target_include_directories(test_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
     target_compile_definitions(test_core PRIVATE ${AUDIOFILE_TEST_DEFINES})
     if(NOT MSVC)
         target_compile_options(test_core PRIVATE -Wall -Wextra)

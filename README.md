@@ -181,9 +181,8 @@ patch sends `open ..., run 1` as a single message with no gap. It skips itself
 when no Pd can be found; point it at one with `-DPD_EXECUTABLE=` or the `PD`
 environment variable.
 
-CI builds macOS, Linux and Windows, adds one Linux job with
-`AUDIOFILE_USE_HOST_MINIAUDIO`, and runs the core tests under ThreadSanitizer
-and under AddressSanitizer with UBSan.
+CI builds macOS, Linux and Windows, and adds one Linux job with
+`AUDIOFILE_USE_HOST_MINIAUDIO`.
 
 ## Structure
 
@@ -196,7 +195,6 @@ src/audiofile_setup.c      the library setup
 src/af_pdpath.h            path resolution against the patch and search path
 src/af_miniaudio.h         the one place miniaudio.h is included
 src/miniaudio_impl.c       compiles miniaudio's implementation
-tests/af_platform.h        a millisecond sleep, for the tests
 ```
 
 `audiofile_core` includes no `m_pd.h`, so the tests build and run without Pd.
