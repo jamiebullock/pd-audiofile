@@ -1,0 +1,11 @@
+#N canvas 20 20 420 300 12;
+#X text 12 15 META this is a prototype of a libdir meta file;
+#N canvas 12 66 420 300 META 0;
+#X text 12 5 NAME audiofile;
+#X text 12 25 VERSION 0.1.0;
+#X text 12 45 AUTHOR Jamie Bullock;
+#X text 12 65 DESCRIPTION reading sound files: header queries and streaming
+playback;
+#X text 12 105 LICENSE Zlib;
+#X text 12 125 KEYWORDS soundfile wav aiff flac mp3 streaming playback;
+#X restore 12 45 pd META;

@@ -1,0 +1,130 @@
+# Builds and tests on the three platforms Pd runs on, both ways round on
+# AUDIOFILE_MINIAUDIO_IMPLEMENTATION. The OFF case links against a stub that
+# compiles miniaudio itself, because otherwise that path is never exercised
+# until someone embeds it.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / miniaudio impl ${{ matrix.miniaudio_implementation }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Quoted: bare ON/OFF are YAML booleans, and the string is what
+        # both CMake and the comparison below want.
+        miniaudio_implementation: ['ON', 'OFF']
+
+    env:
+      PD_VERSION: 0.55-2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ffmpeg widens the fixture set to FLAC, MP3 and Vorbis. Without it the
+      # tests skip those rather than fail.
+      - name: Install ffmpeg and Pd (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg puredata-core
+
+      - name: Install ffmpeg and Pd (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg || true
+          brew install --cask pd || true
+
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install -y ffmpeg
+
+      # Pd's headers alone are not enough on Windows: a DLL cannot leave Pd's
+      # symbols undefined, so the binary distribution is fetched for pd.lib.
+      - name: Fetch Pd for Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "http://msp.ucsd.edu/Software/pd-$env:PD_VERSION.msw.zip"
+          Invoke-WebRequest -Uri $url -OutFile pd.zip
+          Expand-Archive pd.zip -DestinationPath pd-msw
+          $root = (Get-ChildItem pd-msw -Directory | Select-Object -First 1).FullName
+          "PD_INCLUDE_DIR=$root/src"     | Out-File -Append $env:GITHUB_ENV
+          "PD_LIBRARY=$root/bin/pd.lib"  | Out-File -Append $env:GITHUB_ENV
+
+      - name: Configure
+        shell: bash
+        run: |
+          args=(-S . -B build
+                -DCMAKE_BUILD_TYPE=Release
+                -DAUDIOFILE_MINIAUDIO_IMPLEMENTATION=${{ matrix.miniaudio_implementation }})
+          if [ "${{ matrix.miniaudio_implementation }}" = "OFF" ]; then
+            args+=(-DAUDIOFILE_HOST_STUB=ON)
+          fi
+          if [ -n "${PD_INCLUDE_DIR:-}" ]; then
+            args+=(-DPD_INCLUDE_DIR="$PD_INCLUDE_DIR" -DPD_LIBRARY="$PD_LIBRARY")
+          fi
+          cmake "${args[@]}"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.miniaudio_implementation == 'ON'
+        with:
+          name: audiofile-${{ matrix.os }}
+          path: |
+            build/audiofile.pd_darwin
+            build/audiofile.pd_linux
+            build/Release/audiofile.dll
+          if-no-files-found: warn
+
+  sanitizers:
+    name: sanitizers / ${{ matrix.sanitizer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [thread, address-undefined]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      # The audio thread's contract is that it takes no lock and races nothing,
+      # and the plain build cannot tell whether that still holds.
+      - name: Configure
+        run: |
+          if [ "${{ matrix.sanitizer }}" = "thread" ]; then
+            flags="-fsanitize=thread -g"
+          else
+            flags="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+          fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_C_FLAGS="$flags" -DCMAKE_EXE_LINKER_FLAGS="$flags"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        # pd_smoke is left out: Pd cannot load a sanitizer-instrumented
+        # external without the sanitizer runtime being preloaded.
+        run: ctest --test-dir build --output-on-failure -R "core|concurrency"
