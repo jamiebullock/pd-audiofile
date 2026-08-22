@@ -871,6 +871,13 @@ int main(int argc, char **argv)
 {
     if (argc > 1) g_dir = argv[1];
 
+    /* No fixtures means no Python at configure time. Nothing here can run,
+     * and every case would fail for want of a file. */
+    if (!exists(fixture("sine_mono_44100_s16.wav"))) {
+        printf("no fixtures in %s: skipping\n", g_dir);
+        return 77;
+    }
+
     printf("pd-audiofile core tests, fixtures in %s\n\n", g_dir);
 
     probe_case("sine_mono_44100_s16.wav",   44100.0, FIXTURE_FRAMES, 1, "s16");

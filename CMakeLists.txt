@@ -247,7 +247,10 @@ if(AUDIOFILE_BUILD_TESTS)
         message(WARNING "Python 3 not found: fixtures will not be generated")
     endif()
 
+    # 77 is a skip: the fixtures need Python 3, which the build does not
+    # require.
     add_test(NAME core COMMAND test_core "${AUDIOFILE_FIXTURE_DIR}")
+    set_tests_properties(core PROPERTIES SKIP_RETURN_CODE 77)
 
     # Drives the control thread and the audio thread at once. Meaningful under
     # ThreadSanitizer; on its own it checks only that the two coexist.
