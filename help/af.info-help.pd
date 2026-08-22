@@ -1,9 +1,7 @@
 #N canvas 60 60 640 600 12;
 #X text 20 14 [af.info] - what is in a sound file;
 #X text 20 40 Reads a file's header and reports its sample rate \, frame
-count \, channel count and sample format. It reads no audio and there
-is no tilde on it \, because it costs no DSP. Nothing in vanilla Pd
-answers this question without loading the file into an array.;
+count \, channel count and sample format. It reads no audio.;
 #X obj 30 128 bng 19 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000
 #000000;
 #X text 58 129 pick a file;
@@ -22,14 +20,12 @@ answers this question without loading the file into an array.;
 #X text 320 386 chans;
 #X text 380 386 format;
 #X obj 30 322 print error;
-#X text 20 424 A bare symbol reads the file too \, which is why [openpanel]
-goes straight in above: no [list prepend read] and [list trim] to say
-nothing new.;
+#X text 20 424 A bare symbol reads the file too \, so [openpanel] connects
+straight in.;
 #X text 20 478 A path is looked up the way Pd looks up any file: next
-to the patch first \, then along the search path. An absolute path works
-too.;
-#X text 20 532 A file it cannot open replies with an error and a short
-reason - nofile \, format or badargs - rather than a list.;
+to the patch first \, then along the search path. Absolute paths work.;
+#X text 20 532 A file it cannot open replies error with a short reason:
+nofile \, format or badargs.;
 #X connect 2 0 4 0;
 #X connect 4 0 7 0;
 #X connect 5 0 7 0;

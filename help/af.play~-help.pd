@@ -1,9 +1,9 @@
 #N canvas 40 40 840 760 12;
 #X text 20 12 [af.play~] - play a sound file from disk;
-#X text 20 38 Streams the file rather than loading it into an array
-\, with start and stop \, looping \, variable speed \, seeking and position
-reporting. The creation argument is the number of signal outlets \,
-2 by default. A file with a different channel count is mixed to it.;
+#X text 20 38 Streaming playback \, with start and stop \, looping \, variable
+speed \, seeking and position reporting. The creation argument is the
+number of signal outlets \, 2 by default. A file with a different channel
+count is mixed to it.;
 #X obj 30 122 bng 19 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000
 #000000;
 #X text 58 123 pick a file to open;
@@ -36,8 +36,8 @@ reporting. The creation argument is the number of signal outlets \,
 #X floatatom 340 370 10 0 0 0 - - - 0;
 #X floatatom 450 370 5 0 0 0 - - - 0;
 #X symbolatom 510 370 8 0 0 0 - - - 0;
-#X text 250 394 info: rate \, frames \, chans \, format - the same four
-elements [af.info] reports;
+#X text 250 394 info: rate \, frames \, chans \, format - what [af.info]
+reports;
 #X obj 250 438 unpack f f;
 #X floatatom 250 478 8 0 0 0 - - - 0;
 #X floatatom 340 478 10 0 0 0 - - - 0;
@@ -46,18 +46,15 @@ elements [af.info] reports;
 #000000;
 #X text 545 439 eof;
 #X obj 600 438 print error;
-#X text 20 540 A bare symbol opens the file too \, which is why [openpanel]
-goes straight in above. Sending open and run 1 together in one message
-is fine: the stream fills up before it plays \, and that is not a dropout.;
-#X text 20 604 speed resamples rather than repitching separately: at
-speed 2 the file plays twice as fast and an octave higher \, which is
-what a file player usually means. Negative speed is not supported in
-this version.;
-#X text 20 668 A file whose sample rate differs from Pd's is resampled
-to Pd's rate \, and speed multiplies that ratio. Opening a second file
-replaces the first and stops playback \; a seek past the end clamps
-there and reads as end of file. Errors carry a short reason: nofile
-\, format \, noopen \, seek or underflow.;
+#X text 20 540 A bare symbol opens the file too \, so [openpanel] connects
+straight in. Sending open and run 1 in one message is fine.;
+#X text 20 604 speed resamples: at speed 2 the file plays twice as fast
+and an octave higher. Negative speed is not supported.;
+#X text 20 668 A file at another sample rate is resampled to Pd's \, and
+speed multiplies that ratio. Opening a second file replaces the first
+and stops playback \; a seek past the end clamps there and reads as
+end of file. Errors carry a short reason: nofile \, format \, noopen
+\, seek or underflow.;
 #X connect 2 0 4 0;
 #X connect 4 0 21 0;
 #X connect 5 0 21 0;
