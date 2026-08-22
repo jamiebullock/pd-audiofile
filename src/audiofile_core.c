@@ -381,7 +381,13 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     }
     ma_sound_set_pitch(sound, (float)s->speed);
 
+    /* The path is what a sample-rate change reopens from, so a stream that
+     * cannot remember it is not open. */
     path_copy = af_copy_string(path);
+    if (path_copy == NULL) {
+        af_free_sound(sound);
+        return AF_ERR_MEMORY;
+    }
 
     atomic_store(&s->running, false);
     atomic_store(&s->live, false);
@@ -490,8 +496,15 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
     {
         af_stream_seek_frames(s, position);
         af_stream_set_running(s, was_running ? 1 : 0);
+        free(path);
+        return;
     }
-    free(path);
+
+    /* Out of memory rebuilding the engine, or reopening the file into it.
+     * There is nothing to report through: the object is silent until the next
+     * open, which the path kept here lets a later rate change attempt. */
+    free(s->path);
+    s->path = path;
 }
 
 af_status af_stream_seek_frames(af_stream *s, uint64_t frame)

@@ -170,10 +170,16 @@ static void af_play_dsp(t_af_play *x, t_signal **sp)
     }
 
     if (n > x->x_bufframes) {
-        x->x_interleaved = (float *)resizebytes(x->x_interleaved,
+        float *grown = (float *)resizebytes(x->x_interleaved,
             (size_t)x->x_bufframes * nch * sizeof(float),
             (size_t)n * nch * sizeof(float));
-        x->x_bufframes = n;
+
+        /* resizebytes has already posted the error. Keeping the buffer it
+         * could not grow leaves the perform routine reading inside it. */
+        if (grown == NULL) return;
+
+        x->x_interleaved = grown;
+        x->x_bufframes   = n;
     }
 
     af_stream_set_output_samplerate(x->x_stream, (double)sp[0]->s_sr);
@@ -209,6 +215,14 @@ static void *af_play_new(t_floatarg fnch)
     x->x_bufframes   = sys_getblksize() > 64 ? sys_getblksize() : 64;
     x->x_interleaved = (float *)getbytes((size_t)x->x_bufframes * nch * sizeof(float));
     x->x_outvec      = (t_sample **)getbytes((size_t)nch * sizeof(t_sample *));
+
+    if (x->x_interleaved == NULL || x->x_outvec == NULL) {
+        /* pd_free calls the class's free method, which releases the stream
+         * and whichever of these two did come back. */
+        pd_error(x, "af.play~: %s", af_status_string(AF_ERR_MEMORY));
+        pd_free((t_pd *)x);
+        return NULL;
+    }
 
     for (i = 0; i < nch; i++) {
         outlet_new(&x->x_obj, &s_signal);
