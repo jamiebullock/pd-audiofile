@@ -1,5 +1,5 @@
 # Builds and tests on the three platforms Pd runs on, both ways round on
-# AUDIOFILE_MINIAUDIO_IMPLEMENTATION. The OFF case links against a stub that
+# AUDIOFILE_USE_HOST_MINIAUDIO. The host case links against a stub that
 # compiles miniaudio itself, because otherwise that path is never exercised
 # until someone embeds it.
 
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.os }} / miniaudio impl ${{ matrix.miniaudio_implementation }}
+    name: ${{ matrix.os }} / host miniaudio ${{ matrix.use_host_miniaudio }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,7 +24,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         # Quoted: bare ON/OFF are YAML booleans, and the string is what
         # both CMake and the comparison below want.
-        miniaudio_implementation: ['ON', 'OFF']
+        use_host_miniaudio: ['OFF', 'ON']
 
     env:
       PD_VERSION: 0.55-2
@@ -78,9 +78,9 @@ jobs:
         run: |
           args=(-S . -B build
                 -DCMAKE_BUILD_TYPE=Release
-                -DAUDIOFILE_MINIAUDIO_IMPLEMENTATION=${{ matrix.miniaudio_implementation }})
-          if [ "${{ matrix.miniaudio_implementation }}" = "OFF" ]; then
-            args+=(-DAUDIOFILE_HOST_STUB=ON)
+                -DAUDIOFILE_USE_HOST_MINIAUDIO=${{ matrix.use_host_miniaudio }})
+          if [ "${{ matrix.use_host_miniaudio }}" = "ON" ]; then
+            args+=(-DAUDIOFILE_HOST_MINIAUDIO_STUB=ON)
           fi
           if [ -n "${PD_INCLUDE_DIR:-}" ]; then
             args+=(-DPD_INCLUDE_DIR="$PD_INCLUDE_DIR" -DPD_LIBRARY="$PD_LIBRARY")
@@ -94,7 +94,7 @@ jobs:
         run: ctest --test-dir build --build-config Release --output-on-failure
 
       - uses: actions/upload-artifact@v4
-        if: matrix.miniaudio_implementation == 'ON'
+        if: matrix.use_host_miniaudio == 'OFF'
         with:
           name: audiofile-${{ matrix.os }}
           path: |

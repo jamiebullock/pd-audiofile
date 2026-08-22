@@ -35,18 +35,16 @@ set(PD_LIBRARY            "" CACHE FILEPATH "pd.lib -- required on Windows only"
 set(PD_EXECUTABLE         "" CACHE FILEPATH "pd, for the smoke test; found if not set")
 set(MINIAUDIO_INCLUDE_DIR "" CACHE PATH   "Directory containing miniaudio.h")
 
-option(AUDIOFILE_MINIAUDIO_IMPLEMENTATION
-       "Compile miniaudio into this library. Turn OFF when the host application already does."
-       ON)
-option(AUDIOFILE_BUILD_TESTS "Build the core test binary" ON)
-option(AUDIOFILE_HOST_STUB
-       "Link a stub that compiles miniaudio itself, to exercise the OFF case"
+option(AUDIOFILE_USE_HOST_MINIAUDIO
+       "Link against the miniaudio the host application compiles, rather than compiling one"
        OFF)
-
-# The MA_NO_* macros decide the layout of ma_engine_config, so a host that
-# compiled miniaudio with them must pass the same set here.
-set(AUDIOFILE_MINIAUDIO_DEFINES "" CACHE STRING
+set(AUDIOFILE_HOST_MINIAUDIO_DEFINES "" CACHE STRING
     "MA_NO_* macros the host compiled miniaudio with (semicolon separated)")
+
+option(AUDIOFILE_BUILD_TESTS "Build the core test binary" ON)
+option(AUDIOFILE_HOST_MINIAUDIO_STUB
+       "Link a stub that compiles miniaudio itself, to exercise the host case"
+       OFF)
 
 # ---------------------------------------------------------------------------
 # Pure Data headers
@@ -104,13 +102,13 @@ endif()
 # ---------------------------------------------------------------------------
 
 set(AUDIOFILE_CORE_SOURCES src/audiofile_core.c)
-if(AUDIOFILE_MINIAUDIO_IMPLEMENTATION)
+if(NOT AUDIOFILE_USE_HOST_MINIAUDIO)
     list(APPEND AUDIOFILE_CORE_SOURCES src/miniaudio_impl.c)
 endif()
-if(AUDIOFILE_HOST_STUB)
-    if(AUDIOFILE_MINIAUDIO_IMPLEMENTATION)
+if(AUDIOFILE_HOST_MINIAUDIO_STUB)
+    if(NOT AUDIOFILE_USE_HOST_MINIAUDIO)
         message(FATAL_ERROR
-            "AUDIOFILE_HOST_STUB is for exercising AUDIOFILE_MINIAUDIO_IMPLEMENTATION=OFF")
+            "AUDIOFILE_HOST_MINIAUDIO_STUB needs AUDIOFILE_USE_HOST_MINIAUDIO")
     endif()
     list(APPEND AUDIOFILE_CORE_SOURCES tests/host_miniaudio.c)
 endif()
@@ -125,15 +123,15 @@ if(AUDIOFILE_WITH_VORBIS)
 endif()
 
 target_compile_definitions(audiofile_core PUBLIC
-    AUDIOFILE_MINIAUDIO_IMPLEMENTATION=$<BOOL:${AUDIOFILE_MINIAUDIO_IMPLEMENTATION}>
+    AUDIOFILE_USE_HOST_MINIAUDIO=$<BOOL:${AUDIOFILE_USE_HOST_MINIAUDIO}>
     AUDIOFILE_WITH_VORBIS=${AUDIOFILE_WITH_VORBIS})
 
-if(NOT AUDIOFILE_MINIAUDIO_IMPLEMENTATION)
-    if(AUDIOFILE_HOST_STUB AND AUDIOFILE_MINIAUDIO_DEFINES STREQUAL "")
+if(AUDIOFILE_USE_HOST_MINIAUDIO)
+    if(AUDIOFILE_HOST_MINIAUDIO_STUB AND AUDIOFILE_HOST_MINIAUDIO_DEFINES STREQUAL "")
         # What tests/host_miniaudio.c compiles with.
-        set(AUDIOFILE_MINIAUDIO_DEFINES MA_NO_DEVICE_IO MA_NO_GENERATION MA_NO_ENCODING)
+        set(AUDIOFILE_HOST_MINIAUDIO_DEFINES MA_NO_DEVICE_IO MA_NO_GENERATION MA_NO_ENCODING)
     endif()
-    target_compile_definitions(audiofile_core PUBLIC ${AUDIOFILE_MINIAUDIO_DEFINES})
+    target_compile_definitions(audiofile_core PUBLIC ${AUDIOFILE_HOST_MINIAUDIO_DEFINES})
 endif()
 
 if(NOT WIN32)

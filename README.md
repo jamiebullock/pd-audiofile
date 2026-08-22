@@ -122,8 +122,8 @@ alone does not provide: add `-DPD_LIBRARY=<path to pd.lib>`.
 | `PD_INCLUDE_DIR` | fetched | directory containing `m_pd.h` |
 | `PD_LIBRARY` | searched | `pd.lib`; Windows only |
 | `MINIAUDIO_INCLUDE_DIR` | fetched | directory containing `miniaudio.h` |
-| `AUDIOFILE_MINIAUDIO_IMPLEMENTATION` | `ON` | compile miniaudio into this library |
-| `AUDIOFILE_MINIAUDIO_DEFINES` | empty | the `MA_NO_*` macros the host compiled miniaudio with |
+| `AUDIOFILE_USE_HOST_MINIAUDIO` | `OFF` | link against the miniaudio the host compiles |
+| `AUDIOFILE_HOST_MINIAUDIO_DEFINES` | empty | the `MA_NO_*` macros the host compiled it with |
 | `PD_EXECUTABLE` | searched | `pd`, for the smoke test |
 | `AUDIOFILE_BUILD_TESTS` | `ON` | build the test binaries |
 
@@ -141,25 +141,25 @@ the meta patch: the layout Pd expects on its search path, and the one
 
 miniaudio's implementation is compiled in exactly one translation unit, so an
 external loaded into an application that already compiles miniaudio must not
-compile a second copy. `AUDIOFILE_MINIAUDIO_IMPLEMENTATION` decides:
+compile a second copy. `AUDIOFILE_USE_HOST_MINIAUDIO` decides:
 
-- **`ON`**, the default: `src/miniaudio_impl.c` is compiled, with
+- **`OFF`**, the default: `src/miniaudio_impl.c` is compiled, with
   `MA_NO_DEVICE_IO`, `MA_NO_GENERATION` and `MA_NO_ENCODING`. That keeps the
   decoders, the converter, the resampler and the playback engine, and drops the
   audio backends, which Pd owns.
-- **`OFF`**: only declarations are included. The host must have compiled
+- **`ON`**: only declarations are included. The host must have compiled
   miniaudio with decoding, the engine, the node graph and the resource manager
   all enabled; each of those missing is a link error.
 
 The host's remaining `MA_NO_*` macros have to be passed in through
-`AUDIOFILE_MINIAUDIO_DEFINES`. Several change the layout of `ma_engine_config`
+`AUDIOFILE_HOST_MINIAUDIO_DEFINES`. Several change the layout of `ma_engine_config`
 and `ma_engine`, `MA_NO_DEVICE_IO` alone by five members, so a translation unit
 that disagrees writes fields at the wrong offsets. That is not a link error, so
 `af_stream_new` checks at run time and answers `config` instead.
 
 ```sh
-cmake -S . -B build -DAUDIOFILE_MINIAUDIO_IMPLEMENTATION=OFF \
-  -DAUDIOFILE_MINIAUDIO_DEFINES="MA_NO_DEVICE_IO;MA_NO_GENERATION;MA_NO_ENCODING"
+cmake -S . -B build -DAUDIOFILE_USE_HOST_MINIAUDIO=ON \
+  -DAUDIOFILE_HOST_MINIAUDIO_DEFINES="MA_NO_DEVICE_IO;MA_NO_GENERATION;MA_NO_ENCODING"
 ```
 
 ## Testing
@@ -184,7 +184,7 @@ when no Pd can be found; point it at one with `-DPD_EXECUTABLE=` or the `PD`
 environment variable.
 
 CI builds macOS, Linux and Windows both ways round on
-`AUDIOFILE_MINIAUDIO_IMPLEMENTATION`, and runs the core and concurrency tests
+`AUDIOFILE_USE_HOST_MINIAUDIO`, and runs the core and concurrency tests
 under ThreadSanitizer and under AddressSanitizer with UBSan.
 
 ## Structure

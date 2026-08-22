@@ -1,10 +1,10 @@
 /* miniaudio_impl.c -- the one translation unit that compiles miniaudio.
- * Excluded from the build when AUDIOFILE_MINIAUDIO_IMPLEMENTATION is off.
+ * Excluded from the build when AUDIOFILE_USE_HOST_MINIAUDIO is on.
  *
  * Part of pd-audiofile. SPDX-License-Identifier: Zlib
  */
 
-#if AUDIOFILE_MINIAUDIO_IMPLEMENTATION
+#if !AUDIOFILE_USE_HOST_MINIAUDIO
 
 /* stb_vorbis calls fopen(). */
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -47,6 +47,6 @@
 #else
 
 /* ISO C forbids an empty translation unit. */
-typedef int af_miniaudio_implementation_disabled;
+typedef int af_host_compiles_miniaudio;
 
 #endif
