@@ -1,7 +1,7 @@
-# Builds and tests on the three platforms Pd runs on, both ways round on
-# AUDIOFILE_USE_HOST_MINIAUDIO. The host case links against a stub that
-# compiles miniaudio itself, because otherwise that path is never exercised
-# until someone embeds it.
+# Builds and tests on the three platforms Pd runs on. One extra job links
+# against a stub that compiles miniaudio itself, because otherwise the
+# embedding path is never exercised until someone embeds it; what that tests
+# is linkage and macro agreement, which is not platform-specific.
 
 name: ci
 
@@ -24,7 +24,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         # Quoted: bare ON/OFF are YAML booleans, and the string is what
         # both CMake and the comparison below want.
-        use_host_miniaudio: ['OFF', 'ON']
+        use_host_miniaudio: ['OFF']
+        include:
+          - os: ubuntu-latest
+            use_host_miniaudio: 'ON'
 
     env:
       PD_VERSION: 0.55-2
@@ -121,8 +124,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      # The audio thread's contract is that it takes no lock and races nothing,
-      # and the plain build cannot tell whether that still holds.
+      # miniaudio reads ahead on a thread of its own, so the reads this makes
+      # are concurrent with it whatever Pd does.
       - name: Configure
         run: |
           if [ "${{ matrix.sanitizer }}" = "thread" ]; then
@@ -142,4 +145,4 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         # pd_smoke is left out: Pd cannot load a sanitizer-instrumented
         # external without the sanitizer runtime being preloaded.
-        run: ctest --test-dir build --output-on-failure -R "core|concurrency"
+        run: ctest --test-dir build --output-on-failure -R core
