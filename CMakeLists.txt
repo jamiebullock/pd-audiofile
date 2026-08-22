@@ -34,9 +34,6 @@ set(AUDIOFILE_HOST_MINIAUDIO_DEFINES "" CACHE STRING
     "MA_NO_* macros the host compiled miniaudio with (semicolon separated)")
 
 option(AUDIOFILE_BUILD_TESTS "Build the core test binary" ON)
-option(AUDIOFILE_HOST_MINIAUDIO_STUB
-       "Link a stub that compiles miniaudio itself, to exercise the host case"
-       OFF)
 
 # ---------------------------------------------------------------------------
 # Pure Data headers
@@ -97,13 +94,6 @@ set(AUDIOFILE_CORE_SOURCES src/audiofile_core.c)
 if(NOT AUDIOFILE_USE_HOST_MINIAUDIO)
     list(APPEND AUDIOFILE_CORE_SOURCES src/miniaudio_impl.c)
 endif()
-if(AUDIOFILE_HOST_MINIAUDIO_STUB)
-    if(NOT AUDIOFILE_USE_HOST_MINIAUDIO)
-        message(FATAL_ERROR
-            "AUDIOFILE_HOST_MINIAUDIO_STUB needs AUDIOFILE_USE_HOST_MINIAUDIO")
-    endif()
-    list(APPEND AUDIOFILE_CORE_SOURCES tests/host_miniaudio.c)
-endif()
 
 add_library(audiofile_core STATIC ${AUDIOFILE_CORE_SOURCES})
 
@@ -119,10 +109,6 @@ target_compile_definitions(audiofile_core PUBLIC
     AUDIOFILE_WITH_VORBIS=${AUDIOFILE_WITH_VORBIS})
 
 if(AUDIOFILE_USE_HOST_MINIAUDIO)
-    if(AUDIOFILE_HOST_MINIAUDIO_STUB AND AUDIOFILE_HOST_MINIAUDIO_DEFINES STREQUAL "")
-        # What tests/host_miniaudio.c compiles with.
-        set(AUDIOFILE_HOST_MINIAUDIO_DEFINES MA_NO_DEVICE_IO MA_NO_GENERATION MA_NO_ENCODING)
-    endif()
     target_compile_definitions(audiofile_core PUBLIC ${AUDIOFILE_HOST_MINIAUDIO_DEFINES})
 endif()
 
@@ -141,11 +127,9 @@ if(MSVC)
     target_compile_options(audiofile_core PRIVATE /W3)
 else()
     target_compile_options(audiofile_core PRIVATE -Wall -Wextra)
-    foreach(third_party src/miniaudio_impl.c tests/host_miniaudio.c)
-        if("${third_party}" IN_LIST AUDIOFILE_CORE_SOURCES)
-            set_source_files_properties(${third_party} PROPERTIES COMPILE_OPTIONS "-w")
-        endif()
-    endforeach()
+    if("src/miniaudio_impl.c" IN_LIST AUDIOFILE_CORE_SOURCES)
+        set_source_files_properties(src/miniaudio_impl.c PROPERTIES COMPILE_OPTIONS "-w")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

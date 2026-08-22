@@ -181,8 +181,7 @@ patch sends `open ..., run 1` as a single message with no gap. It skips itself
 when no Pd can be found; point it at one with `-DPD_EXECUTABLE=` or the `PD`
 environment variable.
 
-CI builds macOS, Linux and Windows, and adds one Linux job with
-`AUDIOFILE_USE_HOST_MINIAUDIO`.
+CI builds and tests macOS, Linux and Windows.
 
 ## Structure
 

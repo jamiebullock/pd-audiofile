@@ -4,7 +4,7 @@
  * Part of pd-audiofile. SPDX-License-Identifier: Zlib
  */
 
-#if !AUDIOFILE_USE_HOST_MINIAUDIO || AUDIOFILE_STUB_COMPILES_MINIAUDIO
+#if !AUDIOFILE_USE_HOST_MINIAUDIO
 
 /* stb_vorbis calls fopen(). */
 #ifndef _CRT_SECURE_NO_WARNINGS
