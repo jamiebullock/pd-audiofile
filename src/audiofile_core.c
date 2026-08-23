@@ -40,9 +40,8 @@ struct af_stream {
     char    *path;
     af_info  info;
 
-    /* Seconds, and false when the container records no length. */
+    /* Seconds; 0 when the container records no length. */
     double duration;
-    bool   have_duration;
 
     bool playing;
     bool looping;
@@ -362,8 +361,7 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
 
     s->sound         = sound;
     s->info          = file_info;
-    s->have_duration = length > 0;
-    s->duration      = (double)length / s->out_rate;
+    s->duration = (double)length / s->out_rate;
     free(s->path);
     s->path = path_copy;
     af_forget_position(s, 0.0);
@@ -388,9 +386,8 @@ void af_stream_close(af_stream *s)
     s->playing = false;
     af_retire_sound(s);
 
-    s->info          = af_info_none;
-    s->duration      = 0.0;
-    s->have_duration = false;
+    s->info     = af_info_none;
+    s->duration = 0.0;
     free(s->path);
     s->path = NULL;
     af_forget_position(s, 0.0);
@@ -417,7 +414,7 @@ void af_stream_set_looping(af_stream *s, int looping)
     if (s == NULL) return;
 
     s->looping = looping != 0;
-    if (s->sound != NULL && !s->have_duration) {
+    if (s->sound != NULL && s->duration == 0.0) {
         ma_sound_set_looping(s->sound, (looping != 0) ? MA_TRUE : MA_FALSE);
     }
 }
@@ -449,9 +446,8 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
     s->path     = NULL;         /* the reopen below takes its own copy */
 
     af_engine_stop(s);
-    s->duration      = 0.0;
-    s->have_duration = false;
-    s->info          = af_info_none;
+    s->duration = 0.0;
+    s->info     = af_info_none;
 
     s->out_rate = samplerate;
     if (af_engine_start(s) == AF_OK && path != NULL &&
@@ -476,7 +472,7 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
     if (s->sound == NULL) return AF_ERR_NOFILE;
 
     if (!(seconds > 0.0)) seconds = 0.0;
-    if (s->have_duration && seconds > s->duration) seconds = s->duration;
+    if (s->duration > 0.0 && seconds > s->duration) seconds = s->duration;
 
     /* A sound at the end ignores a seek. Starting it clears that, at the cost
      * of a rewind the seek below replaces. */
@@ -577,7 +573,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     position = s->position;
     want     = frames;
 
-    if (!s->looping && s->have_duration) {
+    if (!s->looping && s->duration > 0.0) {
         double remaining = s->duration - position;
         double out_left  = (remaining > 0.0) ? remaining / block_seconds : 0.0;
 
@@ -616,7 +612,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     if (read == frames) s->primed = true;
 
     position += (double)read * block_seconds;
-    if (s->looping && s->have_duration) {
+    if (s->looping && s->duration > 0.0) {
         while (position >= s->duration) position -= s->duration;
     }
 
