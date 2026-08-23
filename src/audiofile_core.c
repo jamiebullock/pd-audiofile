@@ -394,12 +394,12 @@ void af_stream_set_playing(af_stream *s, int playing)
 {
     if (s == NULL) return;
 
-    s->playing = playing != 0;
+    s->playing = playing;
     if (s->sound == NULL) return;
 
     /* Starting a sound that reached the end rewinds it, which is not what
      * `run 1` after an eof means. */
-    if (playing != 0) {
+    if (playing) {
         if (!ma_sound_at_end(s->sound)) ma_sound_start(s->sound);
     } else {
         ma_sound_stop(s->sound);
@@ -410,9 +410,9 @@ void af_stream_set_looping(af_stream *s, int looping)
 {
     if (s == NULL) return;
 
-    s->looping = looping != 0;
+    s->looping = looping;
     if (s->sound != NULL && s->duration == 0.0) {
-        ma_sound_set_looping(s->sound, (looping != 0) ? MA_TRUE : MA_FALSE);
+        ma_sound_set_looping(s->sound, looping ? MA_TRUE : MA_FALSE);
     }
 }
 
