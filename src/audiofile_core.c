@@ -566,8 +566,6 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 
     if (read < frames) {
         if (at_end || ma_sound_at_end(sound)) {
-            /* The data source loops, so the play head has to be put back on
-             * the end it just passed. */
             if (at_end) {
                 position = s->duration;
                 ma_sound_seek_to_pcm_frame(sound, af_seconds_to_frames(s, s->duration));

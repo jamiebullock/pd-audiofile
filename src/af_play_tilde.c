@@ -1,4 +1,4 @@
-/* af_play_tilde.c -- the [af.play~] class: inlets, outlets and the DSP chain.
+/* af_play_tilde.c -- the [af.play~] class
  * Decoding, resampling and buffering are in audiofile_core.
  *
  * Part of pd-audiofile
@@ -25,8 +25,8 @@ typedef struct _af_play {
     t_outlet   *x_msgout;
 
     int         x_nch;
-    t_sample  **x_outvec;       /* the signal outlets, as the DSP chain sees them */
-    float      *x_interleaved;  /* what the core hands back, before it is spread */
+    t_sample  **x_outvec;
+    float      *x_interleaved;
     int         x_bufframes;
 } t_af_play;
 
@@ -47,7 +47,6 @@ static void af_play_report_info(t_af_play *x, const af_info *info)
     outlet_anything(x->x_msgout, gensym("info"), 4, out);
 }
 
-/* Pd's main thread. outlet_* is not safe from the perform routine. */
 static void af_play_tick(t_af_play *x)
 {
     unsigned events = af_stream_read_events(x->x_stream);
@@ -166,7 +165,6 @@ static void af_play_dsp(t_af_play *x, t_signal **sp)
     int nch = x->x_nch;
     int i;
 
-    /* No signal inlets, so sp[0] onwards are the outlets. */
     for (i = 0; i < nch; i++) {
         x->x_outvec[i] = sp[i]->s_vec;
     }
@@ -176,8 +174,6 @@ static void af_play_dsp(t_af_play *x, t_signal **sp)
             (size_t)x->x_bufframes * nch * sizeof(float),
             (size_t)n * nch * sizeof(float));
 
-        /* resizebytes has already posted the error. Keeping the buffer it
-         * could not grow leaves the perform routine reading inside it. */
         if (grown == NULL) return;
 
         x->x_interleaved = grown;
@@ -219,8 +215,6 @@ static void *af_play_new(t_floatarg fnch)
     x->x_outvec      = (t_sample **)getbytes((size_t)nch * sizeof(t_sample *));
 
     if (x->x_interleaved == NULL || x->x_outvec == NULL) {
-        /* pd_free calls the class's free method, which releases the stream
-         * and whichever of these two did come back. */
         pd_error(x, "af.play~: %s", af_status_string(AF_ERR_MEMORY));
         pd_free((t_pd *)x);
         return NULL;
@@ -237,7 +231,6 @@ static void *af_play_new(t_floatarg fnch)
 
 static void af_play_free(t_af_play *x)
 {
-    /* The clock can fire while the stream exists, so it goes first. */
     if (x->x_clock) clock_free(x->x_clock);
     af_stream_free(x->x_stream);
     if (x->x_interleaved) {

@@ -1,4 +1,4 @@
-/* miniaudio_impl.c -- the one translation unit that compiles miniaudio.
+/* miniaudio_impl.c -- the translation unit that compiles miniaudio.
  * Excluded from the build when AUDIOFILE_USE_HOST_MINIAUDIO is on.
  *
  * Part of pd-audiofile
