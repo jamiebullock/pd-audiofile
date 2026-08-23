@@ -1,6 +1,9 @@
 /* af_pdpath.h -- resolves the symbol in a `read` or `open` message to a path.
  *
- * Part of pd-audiofile. SPDX-License-Identifier: Zlib
+ * Part of pd-audiofile
+ *
+ * SPDX-FileCopyrightText: 2026 Jamie Bullock
+ * SPDX-License-Identifier: Zlib
  */
 
 #ifndef AF_PDPATH_H

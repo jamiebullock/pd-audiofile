@@ -1,7 +1,10 @@
 /* miniaudio_impl.c -- the one translation unit that compiles miniaudio.
  * Excluded from the build when AUDIOFILE_USE_HOST_MINIAUDIO is on.
  *
- * Part of pd-audiofile. SPDX-License-Identifier: Zlib
+ * Part of pd-audiofile
+ *
+ * SPDX-FileCopyrightText: 2026 Jamie Bullock
+ * SPDX-License-Identifier: Zlib
  */
 
 #if !AUDIOFILE_USE_HOST_MINIAUDIO

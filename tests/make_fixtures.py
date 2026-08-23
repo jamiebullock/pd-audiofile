@@ -12,7 +12,10 @@ parsing has to get right and because a stdlib module that writes them is not
 something to rely on any more. FLAC, MP3 and Vorbis are handed to ffmpeg when
 it is on the path; the C tests skip whatever is missing.
 
-Part of pd-audiofile. SPDX-License-Identifier: Zlib
+Part of pd-audiofile
+
+SPDX-FileCopyrightText: 2026 Jamie Bullock
+SPDX-License-Identifier: Zlib
 """
 
 import argparse

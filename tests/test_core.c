@@ -4,7 +4,10 @@
  * 44100 Hz, so frame n holds 0.5 * sin(2*pi*n/100) whatever the container.
  * That is what lets a test say where a seek landed.
  *
- * Part of pd-audiofile. SPDX-License-Identifier: Zlib
+ * Part of pd-audiofile
+ *
+ * SPDX-FileCopyrightText: 2026 Jamie Bullock
+ * SPDX-License-Identifier: Zlib
  */
 
 #include "audiofile_core.h"

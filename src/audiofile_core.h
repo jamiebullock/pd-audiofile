@@ -6,7 +6,10 @@
  * libpd itself requires. Reading ahead from disk happens on miniaudio's own
  * thread, which this code never waits for.
  *
- * Part of pd-audiofile. SPDX-License-Identifier: Zlib
+ * Part of pd-audiofile
+ *
+ * SPDX-FileCopyrightText: 2026 Jamie Bullock
+ * SPDX-License-Identifier: Zlib
  */
 
 #ifndef AUDIOFILE_CORE_H

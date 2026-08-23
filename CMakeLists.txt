@@ -1,4 +1,6 @@
 # pd-audiofile -- a sound-file library for Pure Data
+#
+# SPDX-FileCopyrightText: 2026 Jamie Bullock
 # SPDX-License-Identifier: Zlib
 
 cmake_minimum_required(VERSION 3.16)

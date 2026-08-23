@@ -11,7 +11,10 @@ Exits 77 when no Pd can be found, which CMake reads as a skip.
 usage: run_pd_smoke.py <directory holding the external> <fixture directory>
                        [path to pd]
 
-Part of pd-audiofile. SPDX-License-Identifier: Zlib
+Part of pd-audiofile
+
+SPDX-FileCopyrightText: 2026 Jamie Bullock
+SPDX-License-Identifier: Zlib
 """
 
 import glob

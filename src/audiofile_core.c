@@ -2,7 +2,10 @@
  * ma_sound per open file. The header has the thread contract, the README the
  * buffering.
  *
- * Part of pd-audiofile. SPDX-License-Identifier: Zlib
+ * Part of pd-audiofile
+ *
+ * SPDX-FileCopyrightText: 2026 Jamie Bullock
+ * SPDX-License-Identifier: Zlib
  */
 
 #include "audiofile_core.h"

@@ -1,6 +1,9 @@
 /* audiofile_setup.c -- the library entry point, called by Pd on -lib audiofile.
  *
- * Part of pd-audiofile. SPDX-License-Identifier: Zlib
+ * Part of pd-audiofile
+ *
+ * SPDX-FileCopyrightText: 2026 Jamie Bullock
+ * SPDX-License-Identifier: Zlib
  */
 
 #include "m_pd.h"
