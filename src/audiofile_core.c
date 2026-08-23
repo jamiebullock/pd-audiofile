@@ -271,12 +271,11 @@ void af_stream_free(af_stream *s)
     free(s);
 }
 
-static void af_forget_position(af_stream *s, double position)
+static void af_clear_reports(af_stream *s)
 {
-    s->position = position;
-    s->eof_reported = false;
+    s->eof_reported       = false;
     s->underflow_reported = false;
-    s->buffer_ran_once = false;
+    s->buffer_ran_once    = false;
 }
 
 static bool af_all_zero(const float *frames, size_t count)
@@ -359,7 +358,8 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     s->duration = (double)length / s->out_rate;
     free(s->path);
     s->path = path_copy;
-    af_forget_position(s, 0.0);
+    af_clear_reports(s);
+    s->position = 0.0;
 
     if (info != NULL) *info = file_info;
     return AF_OK;
@@ -386,7 +386,8 @@ void af_stream_close(af_stream *s)
     s->duration = 0.0;
     free(s->path);
     s->path = NULL;
-    af_forget_position(s, 0.0);
+    af_clear_reports(s);
+    s->position = 0.0;
 }
 
 void af_stream_set_playing(af_stream *s, int playing)
@@ -480,7 +481,8 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
     if (ma_sound_seek_to_pcm_frame(s->sound, af_seconds_to_frames(s, seconds)) != MA_SUCCESS) {
         return AF_ERR_SEEK;
     }
-    af_forget_position(s, seconds);
+    af_clear_reports(s);
+    s->position = seconds;
     s->seek_pending = true;
 
     return AF_OK;
