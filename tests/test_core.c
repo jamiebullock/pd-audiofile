@@ -165,6 +165,13 @@ static float *scratch_buffer(size_t frames, size_t channels)
     return p;
 }
 
+static uint64_t tell_frames(af_stream *s)
+{
+    af_info info;
+    if (af_stream_info(s, &info) != AF_OK) return 0;
+    return (uint64_t)(af_stream_tell_seconds(s) * info.samplerate + 0.5);
+}
+
 static double expected_sample(double frame)
 {
     return FIXTURE_AMP * sin(2.0 * AF_PI * frame / FIXTURE_PERIOD);
@@ -370,9 +377,9 @@ static void test_seek(void)
     ok(err < 0.02, "the block after the seek is off by %.4f (best lag %d): "
                    "stale samples, or the wrong position", err, lag);
 
-    ok(labs((long)af_stream_tell_frames(s) - (long)(target + 512)) <= 64,
+    ok(labs((long)tell_frames(s) - (long)(target + 512)) <= 64,
        "position reads %llu, wanted about %llu",
-       (unsigned long long)af_stream_tell_frames(s),
+       (unsigned long long)tell_frames(s),
        (unsigned long long)(target + 512));
 
     /* Seeking back and forth repeatedly is where a seek that has not settled
@@ -499,7 +506,7 @@ static void test_loop(void)
        "produced %lu frames while looping", (unsigned long)d.frames);
 
     /* The position has to follow the file round, not run past its length. */
-    pos_after = af_stream_tell_frames(s);
+    pos_after = tell_frames(s);
     ok(pos_after < (uint64_t)FIXTURE_FRAMES,
        "position reads %llu after wrapping a %d frame file",
        (unsigned long long)pos_after, FIXTURE_FRAMES);
@@ -513,7 +520,7 @@ static void test_loop(void)
     }
 
     begin("switching looping off lets the file end");
-    pos_before = af_stream_tell_frames(s);
+    pos_before = tell_frames(s);
     ok(pos_before <= (uint64_t)FIXTURE_FRAMES, "position is inside the file");
     af_stream_set_looping(s, 0);
     d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 8000);
@@ -680,29 +687,29 @@ static void test_output_samplerate_change(void)
     d = drain(s, buf, 4096, 64, 1, 3000);
     ok(d.frames == 4096, "got %lu frames before the rate changed",
        (unsigned long)d.frames);
-    before = af_stream_tell_frames(s);
+    before = tell_frames(s);
 
     af_stream_set_output_samplerate(s, 48000.0);
 
     ok(af_stream_info(s, &info) == AF_OK, "the file is still open");
     ok(info.samplerate == FIXTURE_RATE, "info still describes the file, at %g",
        info.samplerate);
-    ok(labs((long)af_stream_tell_frames(s) - (long)before) <= 64,
+    ok(labs((long)tell_frames(s) - (long)before) <= 64,
        "the position moved from %llu to %llu",
        (unsigned long long)before,
-       (unsigned long long)af_stream_tell_frames(s));
+       (unsigned long long)tell_frames(s));
 
     /* The file is reopened and sought behind this, so let it settle before
      * measuring what comes out. */
     drain(s, buf, 512, 64, 1, 3000);
-    before = af_stream_tell_frames(s);
+    before = tell_frames(s);
 
     /* 4800 frames at 48000 Hz is 4410 frames of a 44100 Hz file. */
     d = drain(s, buf, 4800, 64, 1, 3000);
     ok(!d.timed_out, "timed out after the rate changed");
     ok(d.frames == 4800, "got %lu frames at the new rate", (unsigned long)d.frames);
 
-    after = af_stream_tell_frames(s);
+    after = tell_frames(s);
     ok(labs((long)(after - before) - 4410L) <= 64,
        "the position advanced by %ld file frames, wanted about 4410",
        (long)(after - before));
@@ -739,7 +746,7 @@ static void test_open_replaces(void)
        "second open");
     ok(info.samplerate == 48000.0, "info follows the new file");
     ok(af_stream_read(s, buf, 64) == 0, "playback did not stop");
-    ok(af_stream_tell_frames(s) == 0, "the position did not go back to zero");
+    ok(tell_frames(s) == 0, "the position did not go back to zero");
 
     begin("a failed open leaves the file that was open alone");
     status = af_stream_open(s, fixture("no_such_file.wav"), &info);

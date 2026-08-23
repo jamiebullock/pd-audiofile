@@ -127,10 +127,9 @@ static void af_play_pos(t_af_play *x, t_floatarg f)
 
 static void af_play_getpos(t_af_play *x)
 {
-    t_atom out[2];
+    t_atom out[1];
     SETFLOAT(&out[0], (t_float)af_stream_tell_seconds(x->x_stream));
-    SETFLOAT(&out[1], (t_float)af_stream_tell_frames(x->x_stream));
-    outlet_anything(x->x_msgout, gensym("pos"), 2, out);
+    outlet_anything(x->x_msgout, gensym("pos"), 1, out);
 }
 
 static t_int *af_play_perform(t_int *w)

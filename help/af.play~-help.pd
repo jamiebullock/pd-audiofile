@@ -35,7 +35,7 @@
 #X obj 341 378 unpack f f;
 #X floatatom 341 418 8 0 0 0 - - - 0;
 #X floatatom 431 418 10 0 0 0 - - - 0;
-#X text 341 442 pos: seconds \, frames;
+#X text 341 442 pos: seconds;
 #X obj 382 348 bng 19 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000;
 #X text 413 351 eof;
 #X obj 423 324 print error;

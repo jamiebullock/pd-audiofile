@@ -75,8 +75,7 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate);
 af_status af_stream_seek_seconds(af_stream *s, double seconds);
 
 /* Where the play head is. */
-uint64_t af_stream_tell_frames(af_stream *s);
-double   af_stream_tell_seconds(af_stream *s);
+double af_stream_tell_seconds(af_stream *s);
 
 /* Writes up to `frames` interleaved frames into `dst` and returns how many;
  * the caller silences the remainder. Meant for a perform routine: it

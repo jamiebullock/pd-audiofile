@@ -462,12 +462,6 @@ double af_stream_tell_seconds(af_stream *s)
     return s->position;
 }
 
-uint64_t af_stream_tell_frames(af_stream *s)
-{
-    if (s == NULL || s->sound == NULL) return 0;
-    return (uint64_t)(s->position * s->info.samplerate + 0.5);
-}
-
 int af_stream_pending(af_stream *s)
 {
     return (s != NULL && s->pending_events != 0) ? 1 : 0;

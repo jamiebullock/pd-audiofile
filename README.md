@@ -72,7 +72,7 @@ count is mixed to the object's.
 | Selector out | Arguments | When |
 | --- | --- | --- |
 | `info` | samplerate, frames, channels, format-symbol | after `open`, and on `info` |
-| `pos` | seconds, frames | on `getpos` |
+| `pos` | seconds | on `getpos` |
 | `eof` | | on reaching the end with looping off |
 | `error` | symbol | any failure, with a short reason |
 
@@ -233,9 +233,8 @@ Position and duration are held in seconds. Frames are ambiguous here: a
 is, so a 48 kHz file in a 44.1 kHz Pd is 20258 frames long inside and 22050
 frames long to a patch, and code that mixes the two is wrong in a way that only
 shows up on files that need resampling. Seconds are the same number on both
-sides. They are converted to frames in three places: seeking, which is what
-miniaudio's API takes, `af_stream_tell_frames`, and the file's length when it is
-read at open.
+sides. They are converted to frames in two places: seeking, which is what
+miniaudio's API takes, and the file's length when it is read at open.
 
 A double holds a second to about 1e-16, which is a five ten-thousandth of a
 frame after a day of audio.
