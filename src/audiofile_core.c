@@ -540,8 +540,8 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     }
 
     if (to_read > 0) {
-        const uint64_t before   = af_frames_read(sound);
-        const bool     seek_pending = s->seek_pending;
+        const uint64_t prev_frames_read = af_frames_read(sound);
+        const bool     seek_pending     = s->seek_pending;
 
         s->seek_pending = false;
 
@@ -550,7 +550,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
         /* Silence the file did not produce is a gap: reporting it as no
          * frames stops the position advancing over frames nobody heard.
          * Silence in the file moves the cursor like anything else. */
-        if (read > 0 && (seek_pending || af_frames_read(sound) == before) &&
+        if (read > 0 && (seek_pending || af_frames_read(sound) == prev_frames_read) &&
             af_all_zero(dst, (size_t)read * s->channels))
         {
             return 0;
