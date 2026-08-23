@@ -500,7 +500,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     ma_sound *sound;
     double    speed, position, block_seconds;
     uint64_t  buffered;
-    size_t    want;
+    size_t    to_read;
     bool      at_end = false;
     ma_uint64 read = 0;
 
@@ -521,33 +521,31 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     block_seconds = speed / s->out_rate;
 
     position = s->position;
-    want     = frames;
+    to_read  = frames;
 
     if (!s->looping && s->duration > 0.0) {
         double remaining = s->duration - position;
         double out_left  = (remaining > 0.0) ? remaining / block_seconds : 0.0;
 
-        if (out_left <= (double)want) {
-            want   = (size_t)out_left;
-            at_end = true;
+        if (out_left <= (double)to_read) {
+            to_read = (size_t)out_left;
+            at_end  = true;
         }
     }
 
-    /* What is buffered bounds the block, so a starved stream is a dropout
-     * rather than a stall. */
     buffered = af_frames_buffered(sound);
     if (!at_end) {
-        double servable = (double)buffered / speed;
-        if (servable < (double)want) want = (size_t)servable;
+        double out_buffered = (double)buffered / speed;
+        if (out_buffered < (double)to_read) to_read = (size_t)out_buffered;
     }
 
-    if (want > 0) {
+    if (to_read > 0) {
         const uint64_t before   = af_frames_read(sound);
         const bool     seek_pending = s->seek_pending;
 
         s->seek_pending = false;
 
-        ma_engine_read_pcm_frames(&s->engine, dst, want, &read);
+        ma_engine_read_pcm_frames(&s->engine, dst, to_read, &read);
 
         /* Silence the file did not produce is a gap: reporting it as no
          * frames stops the position advancing over frames nobody heard.
