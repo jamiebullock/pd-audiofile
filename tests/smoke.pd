@@ -1,4 +1,4 @@
-#N canvas 60 60 820 480 12;
+#N canvas 60 60 820 460 12;
 #X obj 30 20 loadbang;
 #X obj 30 60 delay 100;
 #X obj 130 60 delay 200;
@@ -6,35 +6,27 @@
 #X obj 350 60 delay 500;
 #X obj 450 60 delay 900;
 #X obj 550 60 delay 2500;
-#X msg 30 110 read sine_mono_44100_s16.wav;
+#X msg 30 110 open sine_mono_44100_s16.wav;
 #X obj 30 150 af.info;
 #X obj 30 190 print INFO;
 #X msg 130 110 \; pd dsp 1;
-#X msg 230 110 open sine_mono_44100_s16.wav \, run 1;
-#X msg 350 110 run 1;
+#X msg 230 110 open sine_mono_44100_s16.wav \, play 1;
+#X msg 350 110 play 1;
 #X msg 450 110 getpos;
 #X msg 550 110 \; pd quit;
 #X obj 230 250 af.play~ 1;
 #X obj 230 320 print PLAY;
-#X obj 650 60 delay 150;
-#X msg 650 110 symbol sine_mono_44100_s16.wav;
-#X obj 650 160 af.info;
-#X obj 650 200 print SYMINFO;
-#X obj 660 250 af.play~ 1;
-#X obj 660 320 print SYMPLAY;
 #X text 30 360 Loaded headless by tests/run_pd_smoke.py. Not a demonstration
 patch: see the help files for that.;
-#X text 30 400 The open and run are sent as one message with no gap
-between them on purpose \, because that is the idiom a patch reaches
-for first and it is where a stream reports a dropout it has not had.
-The bare symbol on the right checks the method [openpanel] needs.;
+#X text 30 400 The open and play are sent as one message with no gap
+between them on purpose \, because that is where a stream reports a
+dropout it has not had.;
 #X connect 0 0 1 0;
 #X connect 0 0 2 0;
 #X connect 0 0 3 0;
 #X connect 0 0 4 0;
 #X connect 0 0 5 0;
 #X connect 0 0 6 0;
-#X connect 0 0 17 0;
 #X connect 1 0 7 0;
 #X connect 2 0 10 0;
 #X connect 3 0 11 0;
@@ -47,8 +39,3 @@ The bare symbol on the right checks the method [openpanel] needs.;
 #X connect 12 0 15 0;
 #X connect 13 0 15 0;
 #X connect 15 1 16 0;
-#X connect 17 0 18 0;
-#X connect 18 0 19 0;
-#X connect 18 0 21 0;
-#X connect 19 0 20 0;
-#X connect 21 1 22 0;

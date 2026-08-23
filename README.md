@@ -39,12 +39,14 @@ No creation arguments. One message outlet.
 
 | Message in | Argument | Meaning |
 | --- | --- | --- |
-| `read <path>` | symbol | read the header and report |
+| `open <path>` | symbol | read the header and report |
 
-The reply is a list: sample rate, frame count, channels, format symbol. A file
-it cannot open replies `error` with a short reason. A bare symbol reads a file,
-so `[openpanel]` connects straight in. `read` is the message `[soundfile_info]`
-takes; the reply is four elements rather than seven.
+| Selector out | Arguments | When |
+| --- | --- | --- |
+| `info` | samplerate, frames, channels, format-symbol | on `open` |
+| `error` | symbol | the file could not be read, with a short reason |
+
+`[openpanel]` goes through `[open $1(`, as it does into `[readsf~]`.
 
 ### `[af.play~]`
 
@@ -60,7 +62,7 @@ count is mixed to the object's.
 | --- | --- | --- |
 | `open <path>` | symbol | open the file and report `info`; does not start playback |
 | `info` | | report `info` for the file already open |
-| `run <0/1>` | float | start and stop |
+| `play <0/1>` | float | start and stop |
 | `loop <0/1>` | float | return to the start on reaching the end |
 | `speed <f>` | float | playback rate; 1 is the file's own rate |
 | `pos <f>` | float | seek, in seconds from the start |
@@ -74,8 +76,8 @@ count is mixed to the object's.
 | `eof` | | on reaching the end with looping off |
 | `error` | symbol | any failure, with a short reason |
 
-A bare symbol opens a file here too. `info` reports the same four elements
-`[af.info]` does.
+`[openpanel]` goes through `[open $1(` here too, and a toggle through
+`[play $1(`. `info` reports the same four elements `[af.info]` does.
 
 Rules:
 
@@ -89,7 +91,7 @@ Rules:
   anything stale, and `getpos` answers the target from the moment it is asked.
 - Running dry outputs silence and reports `error underflow` once per stall
   rather than once per block. Filling up is not running dry: a fresh `open`, or
-  a seek into a region not yet buffered, reports nothing, so `open ..., run 1`
+  a seek into a region not yet buffered, reports nothing, so `open ..., play 1`
   in one message is fine.
 
 ## Building
@@ -176,8 +178,8 @@ MP3 and Vorbis where `ffmpeg` is on the path. A signal known frame by frame
 lets a test say which frame a seek reached.
 
 `tests/run_pd_smoke.py` loads the library into a headless Pd and checks that the
-objects create, answer `info`, play, take a bare symbol and report `eof`. Its
-patch sends `open ..., run 1` as a single message with no gap. It skips itself
+objects create, answer `info`, play and report `eof`. Its patch sends
+`open ..., play 1` as a single message with no gap. It skips itself
 when no Pd can be found; point it at one with `-DPD_EXECUTABLE=` or the `PD`
 environment variable.
 

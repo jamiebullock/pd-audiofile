@@ -27,18 +27,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # `open …, run 1` in a single message used to report a dropout before a frame
 # had been delivered, and nothing in the C tests would have caught it in Pd.
 EXPECTED = [
-    "INFO: 44100 22050 1 s16",
+    "INFO: info 44100 22050 1 s16",
     "PLAY: info 44100 22050 1 s16",
     "PLAY: pos",
     "PLAY: eof",
-    # A bare symbol, which is what [openpanel] emits, on both classes.
-    "SYMINFO: 44100 22050 1 s16",
-    "SYMPLAY: info 44100 22050 1 s16",
 ]
 
 UNEXPECTED = [
+    "INFO: error",
     "PLAY: error",
-    "SYMPLAY: error",
     "couldn't create",
     "no method for",
 ]

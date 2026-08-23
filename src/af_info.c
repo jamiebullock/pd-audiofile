@@ -22,7 +22,7 @@ static void af_info_fail(t_af_info *x, af_status status)
     outlet_anything(x->x_out, gensym("error"), 1, &a);
 }
 
-static void af_info_read(t_af_info *x, t_symbol *name)
+static void af_info_open(t_af_info *x, t_symbol *name)
 {
     char      path[MAXPDSTRING];
     af_info   info;
@@ -47,14 +47,14 @@ static void af_info_read(t_af_info *x, t_symbol *name)
     SETFLOAT (&out[2], (t_float)info.channels);
     SETSYMBOL(&out[3], gensym(info.format));
 
-    outlet_list(x->x_out, &s_list, 4, out);
+    outlet_anything(x->x_out, gensym("info"), 4, out);
 }
 
 static void *af_info_new(void)
 {
     t_af_info *x = (t_af_info *)pd_new(af_info_class);
     x->x_canvas = canvas_getcurrent();
-    x->x_out    = outlet_new(&x->x_obj, &s_list);
+    x->x_out    = outlet_new(&x->x_obj, &s_anything);
     return x;
 }
 
@@ -64,9 +64,6 @@ void af_info_setup(void)
                               (t_newmethod)af_info_new, 0,
                               sizeof(t_af_info), 0, 0);
 
-    class_addmethod(af_info_class, (t_method)af_info_read,
-                    gensym("read"), A_SYMBOL, 0);
-
-    /* [openpanel] emits a bare symbol. */
-    class_addsymbol(af_info_class, (t_method)af_info_read);
+    class_addmethod(af_info_class, (t_method)af_info_open,
+                    gensym("open"), A_SYMBOL, 0);
 }
