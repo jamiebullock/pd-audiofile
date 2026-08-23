@@ -514,8 +514,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
         return 0;
     }
 
-    /* One output frame carries `speed` seconds of the file, at the engine's
-     * rate. */
+    /* One output frame carries `speed` seconds of the file. Engine rate. */
     speed = (double)ma_sound_get_pitch(sound);
     if (speed <= 0.0) speed = 1.0;
     block_seconds = speed / s->out_rate;

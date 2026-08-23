@@ -17,9 +17,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(FetchContent)
 
-# The two inputs the build has to locate are pinned, so that a build from a
-# clean checkout is the same build everywhere. Point the *_INCLUDE_DIR options
-# at a copy you already have to skip the fetch.
 set(PD_GIT_TAG        "0.55-2" CACHE STRING "Pure Data tag to fetch m_pd.h from")
 set(MINIAUDIO_GIT_TAG "9634bedb5b5a2ca38c1ee7108a9358a4e233f14d"
     CACHE STRING "miniaudio commit to fetch (0.11.25)")
@@ -89,7 +86,7 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# The core: no Pd, so the tests can have it too
+# The core
 # ---------------------------------------------------------------------------
 
 set(AUDIOFILE_CORE_SOURCES src/audiofile_core.c)
