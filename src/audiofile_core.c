@@ -547,9 +547,10 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 
         ma_engine_read_pcm_frames(&s->engine, dst, to_read, &read);
 
-        /* Silence the file did not produce is a gap: reporting it as no
-         * frames stops the position advancing over frames nobody heard.
-         * Silence in the file moves the cursor like anything else. */
+        /* If the block is all zeros and either a seek is outstanding or the
+         * file's read count has not moved, then return early: the position
+         * must not advance over frames nobody heard. Silence that is in the
+         * file moves that count, so it still plays. */
         if (read > 0 && (seek_pending || af_frames_read(sound) == prev_frames_read) &&
             af_all_zero(dst, (size_t)read * s->channels))
         {
