@@ -40,11 +40,6 @@ struct af_stream {
     char    *path;
     af_info  info;
 
-    /* The data source always loops, so the pages either side of the loop
-     * point are filled knowing they wrap, and a file played once is stopped
-     * here by counting `length` down. False when no length is known. */
-    bool engine_loops;
-
     /* In the engine's frames; 0 when the container records no length. */
     uint64_t length;
 
@@ -376,7 +371,6 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
 
     s->sound = sound;
     s->info  = file_info;
-    s->engine_loops = length > 0;
     s->length = (uint64_t)length;
     free(s->path);
     s->path = path_copy;
@@ -404,7 +398,6 @@ void af_stream_close(af_stream *s)
 
     s->info = af_info_none;
     s->length = 0;
-    s->engine_loops = false;
     free(s->path);
     s->path = NULL;
     af_forget_position(s, 0.0);
@@ -431,7 +424,7 @@ void af_stream_set_loop(af_stream *s, int loop)
     if (s == NULL) return;
 
     s->loop = loop != 0;
-    if (s->sound != NULL && !s->engine_loops) {
+    if (s->sound != NULL && s->length == 0) {
         ma_sound_set_looping(s->sound, (loop != 0) ? MA_TRUE : MA_FALSE);
     }
 }
@@ -650,7 +643,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
         if (at_end || ma_sound_at_end(sound)) {
             /* The data source loops, so the play head has to be put back on
              * the end it just passed. */
-            if (at_end && s->engine_loops) {
+            if (at_end) {
                 position = (double)length;
                 ma_sound_seek_to_pcm_frame(sound, length);
             }
