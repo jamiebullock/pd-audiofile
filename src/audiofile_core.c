@@ -456,14 +456,6 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
     return AF_OK;
 }
 
-af_status af_stream_seek_frames(af_stream *s, uint64_t frame)
-{
-    if (s == NULL) return AF_ERR_ARGS;
-    if (s->info.samplerate <= 0.0) return AF_ERR_NOFILE;
-
-    return af_stream_seek_seconds(s, (double)frame / s->info.samplerate);
-}
-
 double af_stream_tell_seconds(af_stream *s)
 {
     if (s == NULL || s->sound == NULL) return 0.0;

@@ -71,9 +71,8 @@ void af_stream_set_speed(af_stream *s, double speed);
 /* Pd's sample rate. */
 void af_stream_set_output_samplerate(af_stream *s, double samplerate);
 
-/* In seconds, or in frames of the file's own rate. Past the end clamps. */
+/* In seconds. Past the end clamps. */
 af_status af_stream_seek_seconds(af_stream *s, double seconds);
-af_status af_stream_seek_frames(af_stream *s, uint64_t frame);
 
 /* Where the play head is. */
 uint64_t af_stream_tell_frames(af_stream *s);

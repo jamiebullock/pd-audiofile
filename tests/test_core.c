@@ -359,7 +359,7 @@ static void test_seek(void)
      * failed to take would be caught handing back frames from around zero. */
     drain(s, buf, 2048, 64, 1, 2000);
 
-    ok(af_stream_seek_frames(s, target) == AF_OK, "seek");
+    ok(af_stream_seek_seconds(s, (double)target / FIXTURE_RATE) == AF_OK, "seek");
 
     d = drain(s, buf, 512, 64, 1, 2000);
     ok(!d.timed_out, "timed out after seeking");
@@ -382,7 +382,7 @@ static void test_seek(void)
         int bad = 0;
         for (i = 0; i < 16; i++) {
             uint64_t where = (uint64_t)(1000 + i * 613);
-            af_stream_seek_frames(s, where);
+            af_stream_seek_seconds(s, (double)where / FIXTURE_RATE);
             d = drain(s, buf, 256, 64, 1, 2000);
             if (d.frames != 256) { bad++; continue; }
             if (phase_error(buf + AF_PRIME, 256 - AF_PRIME,
@@ -392,7 +392,8 @@ static void test_seek(void)
     }
 
     begin("seeking past the end clamps, and reads as end of file");
-    ok(af_stream_seek_frames(s, FIXTURE_FRAMES * 4) == AF_OK, "seek past the end");
+    ok(af_stream_seek_seconds(s, FIXTURE_FRAMES * 4 / FIXTURE_RATE) == AF_OK,
+       "seek past the end");
     d = drain(s, buf, 512, 64, 1, 1000);
     ok(d.eofs == 1, "eof reported %d times after seeking past the end", d.eofs);
     ok(d.frames == 0, "%lu frames came back from beyond the end",
@@ -400,7 +401,7 @@ static void test_seek(void)
 
     begin("seeking with no file open");
     af_stream_close(s);
-    ok(af_stream_seek_frames(s, 0) == AF_ERR_NOFILE, "seek without a file");
+    ok(af_stream_seek_seconds(s, 0.0) == AF_ERR_NOFILE, "seek without a file");
 
     free(buf);
     af_stream_free(s);
@@ -589,7 +590,7 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
         int reports = 0;
         int i;
 
-        ok(af_stream_seek_frames(s, (uint64_t)(500 + trial * 311)) == AF_OK, "seek");
+        ok(af_stream_seek_seconds(s, (500 + trial * 311) / FIXTURE_RATE) == AF_OK, "seek");
         for (i = 0; i < 8; i++) {
             af_stream_read(s, buf, 64);
             if (af_stream_take_events(s) & AF_EVENT_UNDERFLOW) reports++;
@@ -640,7 +641,7 @@ static void test_underflow(void)
     ok(reports == 1, "%d underflow reports across one stall", reports);
 
     /* A seek ends the stall, so the next one is a new one. */
-    ok(af_stream_seek_frames(s, 0) == AF_OK, "seek");
+    ok(af_stream_seek_seconds(s, 0.0) == AF_OK, "seek");
     af_stream_set_speed(s, 1.0);
     ok(settle(s, buf, 64), "the stream never got going again");
 
