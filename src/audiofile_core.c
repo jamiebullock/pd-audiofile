@@ -51,7 +51,7 @@ struct af_stream {
     double position;
 
     /* Set by a seek, cleared by the block that seek is applied in. */
-    bool settling;
+    bool seek_pending;
 
     bool eof_seen;
     bool starved;
@@ -485,7 +485,7 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
         return AF_ERR_SEEK;
     }
     af_forget_position(s, seconds);
-    s->settling = true;
+    s->seek_pending = true;
 
     return AF_OK;
 }
@@ -593,16 +593,16 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 
     if (want > 0) {
         const uint64_t before   = af_source_cursor(sound);
-        const bool     settling = s->settling;
+        const bool     seek_pending = s->seek_pending;
 
-        s->settling = false;
+        s->seek_pending = false;
 
         ma_engine_read_pcm_frames(&s->engine, dst, want, &read);
 
         /* Silence the file did not produce is a gap: reporting it as no
          * frames stops the position advancing over frames nobody heard.
          * Silence in the file moves the cursor like anything else. */
-        if (read > 0 && (settling || af_source_cursor(sound) == before) &&
+        if (read > 0 && (seek_pending || af_source_cursor(sound) == before) &&
             af_all_zero(dst, (size_t)read * s->channels))
         {
             return 0;
