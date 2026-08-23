@@ -487,8 +487,6 @@ static void af_report_eof(af_stream *s)
     if (!s->eof_reported) { s->eof_reported = true; af_raise(s, AF_EVENT_EOF); }
 }
 
-/* An empty buffer before the stream has filled after a seek is the buffer
- * filling, which is not a dropout. */
 static void af_report_underflow(af_stream *s)
 {
     if (s->buffer_ran_once && !s->underflow_reported) {
