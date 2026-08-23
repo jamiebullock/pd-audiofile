@@ -53,11 +53,11 @@ struct af_stream {
     /* Set by a seek, cleared by the block that seek is applied in. */
     bool seek_pending;
 
-    bool eof_seen;
-    bool starved;
-    bool primed;
+    bool eof_reported;
+    bool underflow_reported;
+    bool buffer_ran_once;
 
-    unsigned events;
+    unsigned pending_events;
 };
 
 const char *af_status_string(af_status status)
@@ -279,9 +279,9 @@ void af_stream_free(af_stream *s)
 static void af_forget_position(af_stream *s, double position)
 {
     s->position = position;
-    s->eof_seen = false;
-    s->starved = false;
-    s->primed = false;
+    s->eof_reported = false;
+    s->underflow_reported = false;
+    s->buffer_ran_once = false;
 }
 
 static bool af_all_zero(const float *frames, size_t count)
@@ -512,7 +512,7 @@ uint64_t af_stream_tell_frames(af_stream *s)
 
 int af_stream_pending(af_stream *s)
 {
-    return (s != NULL && s->events != 0) ? 1 : 0;
+    return (s != NULL && s->pending_events != 0) ? 1 : 0;
 }
 
 unsigned af_stream_take_events(af_stream *s)
@@ -520,27 +520,27 @@ unsigned af_stream_take_events(af_stream *s)
     unsigned events;
 
     if (s == NULL) return 0u;
-    events = s->events;
-    s->events = 0u;
+    events = s->pending_events;
+    s->pending_events = 0u;
     return events;
 }
 
 static void af_raise(af_stream *s, unsigned event)
 {
-    s->events |= event;
+    s->pending_events |= event;
 }
 
 static void af_report_eof(af_stream *s)
 {
-    if (!s->eof_seen) { s->eof_seen = true; af_raise(s, AF_EVENT_EOF); }
+    if (!s->eof_reported) { s->eof_reported = true; af_raise(s, AF_EVENT_EOF); }
 }
 
 /* An empty buffer before the stream has filled after a seek is the buffer
  * filling, which is not a dropout. */
 static void af_report_underflow(af_stream *s)
 {
-    if (s->primed && !s->starved) {
-        s->starved = true;
+    if (s->buffer_ran_once && !s->underflow_reported) {
+        s->underflow_reported = true;
         af_raise(s, AF_EVENT_UNDERFLOW);
     }
 }
@@ -609,7 +609,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
         }
     }
 
-    if (read == frames) s->primed = true;
+    if (read == frames) s->buffer_ran_once = true;
 
     position += (double)read * block_seconds;
     if (s->looping && s->duration > 0.0) {
@@ -629,7 +629,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
             af_report_underflow(s);
         }
     } else {
-        s->starved = false;
+        s->underflow_reported = false;
     }
 
     s->position = position;
