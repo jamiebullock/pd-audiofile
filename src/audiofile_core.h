@@ -85,13 +85,13 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames);
 /* Nonzero when there is an event waiting, without consuming it. */
 int af_stream_pending(af_stream *s);
 
-/* Takes every event raised since the last call; each is raised once. */
+/* Reads every event raised since the last call; each is raised once. */
 typedef enum {
     AF_EVENT_EOF       = 1 << 0,
     AF_EVENT_UNDERFLOW = 1 << 1
 } af_event;
 
-unsigned af_stream_take_events(af_stream *s);
+unsigned af_stream_read_events(af_stream *s);
 
 #define AF_SPEED_MIN 0.001
 #define AF_SPEED_MAX 32.0

@@ -50,7 +50,7 @@ static void af_play_report_info(t_af_play *x, const af_info *info)
 /* Pd's main thread. outlet_* is not safe from the perform routine. */
 static void af_play_tick(t_af_play *x)
 {
-    unsigned events = af_stream_take_events(x->x_stream);
+    unsigned events = af_stream_read_events(x->x_stream);
 
     if (events & AF_EVENT_UNDERFLOW) {
         af_play_fail(x, "underflow");

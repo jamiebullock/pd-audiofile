@@ -126,7 +126,7 @@ static af_drain drain(af_stream *s, float *out, size_t limit,
         got = af_stream_read(s, out ? out + d.frames * channels : NULL, want);
 
         {
-            unsigned events = af_stream_take_events(s);
+            unsigned events = af_stream_read_events(s);
             if (events & AF_EVENT_EOF)       d.eofs++;
             if (events & AF_EVENT_UNDERFLOW) d.underflows++;
         }
@@ -153,7 +153,7 @@ static int settle(af_stream *s, float *buf, size_t frames)
         af_sleep_ms(1);
         if (++waited > 2000) return 0;
     }
-    af_stream_take_events(s);
+    af_stream_read_events(s);
     return 1;
 }
 
@@ -559,7 +559,7 @@ static void test_cold_start_is_not_a_dropout(void)
         af_stream_set_playing(s, 1);
         for (i = 0; i < 8; i++) {
             af_stream_read(s, buf, 64);
-            if (af_stream_take_events(s) & AF_EVENT_UNDERFLOW) reports++;
+            if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
         }
         if (reports > 0) trials_with_reports++;
 
@@ -591,7 +591,7 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
     buf = scratch_buffer(4096, 1);
     af_stream_set_playing(s, 1);
     drain(s, buf, 1024, 64, 1, 2000);
-    af_stream_take_events(s);
+    af_stream_read_events(s);
 
     for (trial = 0; trial < 20; trial++) {
         int reports = 0;
@@ -600,7 +600,7 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
         ok(af_stream_seek_seconds(s, (500 + trial * 311) / FIXTURE_RATE) == AF_OK, "seek");
         for (i = 0; i < 8; i++) {
             af_stream_read(s, buf, 64);
-            if (af_stream_take_events(s) & AF_EVENT_UNDERFLOW) reports++;
+            if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
         }
         if (reports > 0) trials_with_reports++;
     }
@@ -642,7 +642,7 @@ static void test_underflow(void)
     af_stream_set_speed(s, AF_SPEED_MAX);
     for (i = 0; i < 40; i++) {
         if (af_stream_read(s, buf, 8192) < 8192) short_reads++;
-        if (af_stream_take_events(s) & AF_EVENT_UNDERFLOW) reports++;
+        if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
     }
     ok(short_reads == 40, "%d of 40 reads fell short: nothing stalled", short_reads);
     ok(reports == 1, "%d underflow reports across one stall", reports);
@@ -656,7 +656,7 @@ static void test_underflow(void)
     short_reads = reports = 0;
     for (i = 0; i < 40; i++) {
         if (af_stream_read(s, buf, 8192) < 8192) short_reads++;
-        if (af_stream_take_events(s) & AF_EVENT_UNDERFLOW) reports++;
+        if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
     }
     ok(short_reads == 40, "%d of 40 reads fell short in the second stall", short_reads);
     ok(reports == 1, "%d underflow reports across the second stall", reports);

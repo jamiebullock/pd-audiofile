@@ -467,7 +467,7 @@ int af_stream_pending(af_stream *s)
     return (s != NULL && s->pending_events != 0) ? 1 : 0;
 }
 
-unsigned af_stream_take_events(af_stream *s)
+unsigned af_stream_read_events(af_stream *s)
 {
     unsigned events;
 
