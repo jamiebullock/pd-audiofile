@@ -165,32 +165,32 @@ af_status af_probe(const char *path, af_info *out)
 
 /* The sound counts in frames of the engine's rate, whatever the file's own
  * rate is; everything here counts in seconds. */
-static uint64_t af_engine_frames(const af_stream *s, double seconds)
+static uint64_t af_seconds_to_frames(const af_stream *s, double seconds)
 {
     return (uint64_t)(seconds * s->out_rate + 0.5);
 }
 
 /* Not the sound's cursor, which already reports a seek that has yet to
  * happen. */
-static uint64_t af_source_cursor(ma_sound *sound)
+static uint64_t af_frames_read(ma_sound *sound)
 {
-    ma_uint64 cursor = 0;
+    ma_uint64 frames = 0;
     ma_data_source *source = (sound != NULL) ? ma_sound_get_data_source(sound) : NULL;
 
     if (source == NULL) return 0;
-    ma_data_source_get_cursor_in_pcm_frames(source, &cursor);
-    return (uint64_t)cursor;
+    ma_data_source_get_cursor_in_pcm_frames(source, &frames);
+    return (uint64_t)frames;
 }
 
-static uint64_t af_available(ma_sound *sound)
+static uint64_t af_frames_buffered(ma_sound *sound)
 {
-    ma_uint64 available = 0;
+    ma_uint64 frames = 0;
     ma_data_source *source = (sound != NULL) ? ma_sound_get_data_source(sound) : NULL;
 
     if (source == NULL) return 0;
     ma_resource_manager_data_source_get_available_frames(
-        (ma_resource_manager_data_source *)source, &available);
-    return (uint64_t)available;
+        (ma_resource_manager_data_source *)source, &frames);
+    return (uint64_t)frames;
 }
 
 static af_status af_engine_start(af_stream *s)
@@ -481,7 +481,7 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
         if (!s->playing) ma_sound_stop(s->sound);
     }
 
-    if (ma_sound_seek_to_pcm_frame(s->sound, af_engine_frames(s, seconds)) != MA_SUCCESS) {
+    if (ma_sound_seek_to_pcm_frame(s->sound, af_seconds_to_frames(s, seconds)) != MA_SUCCESS) {
         return AF_ERR_SEEK;
     }
     af_forget_position(s, seconds);
@@ -549,7 +549,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 {
     ma_sound *sound;
     double    speed, position, block_seconds;
-    uint64_t  available;
+    uint64_t  buffered;
     size_t    want;
     bool      at_end = false;
     ma_uint64 read = 0;
@@ -585,14 +585,14 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 
     /* What is buffered bounds the block, so a starved stream is a dropout
      * rather than a stall. */
-    available = af_available(sound);
+    buffered = af_frames_buffered(sound);
     if (!at_end) {
-        double servable = (double)available / speed;
+        double servable = (double)buffered / speed;
         if (servable < (double)want) want = (size_t)servable;
     }
 
     if (want > 0) {
-        const uint64_t before   = af_source_cursor(sound);
+        const uint64_t before   = af_frames_read(sound);
         const bool     seek_pending = s->seek_pending;
 
         s->seek_pending = false;
@@ -602,7 +602,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
         /* Silence the file did not produce is a gap: reporting it as no
          * frames stops the position advancing over frames nobody heard.
          * Silence in the file moves the cursor like anything else. */
-        if (read > 0 && (seek_pending || af_source_cursor(sound) == before) &&
+        if (read > 0 && (seek_pending || af_frames_read(sound) == before) &&
             af_all_zero(dst, (size_t)read * s->channels))
         {
             return 0;
@@ -622,7 +622,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
              * the end it just passed. */
             if (at_end) {
                 position = s->duration;
-                ma_sound_seek_to_pcm_frame(sound, af_engine_frames(s, s->duration));
+                ma_sound_seek_to_pcm_frame(sound, af_seconds_to_frames(s, s->duration));
             }
             af_report_eof(s);
         } else {
