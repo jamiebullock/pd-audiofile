@@ -221,15 +221,10 @@ static void af_free_sound(ma_sound *sound)
     free(sound);
 }
 
-static void af_retire_sound(af_stream *s)
+static void af_engine_stop(af_stream *s)
 {
     af_free_sound(s->sound);
     s->sound = NULL;
-}
-
-static void af_engine_stop(af_stream *s)
-{
-    af_retire_sound(s);
     if (s->engine_ready) {
         ma_engine_uninit(&s->engine);
         s->engine_ready = false;
@@ -357,7 +352,7 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     }
 
     s->playing = false;
-    af_retire_sound(s);
+    af_free_sound(s->sound);
 
     s->sound         = sound;
     s->info          = file_info;
@@ -384,7 +379,8 @@ void af_stream_close(af_stream *s)
     if (s == NULL) return;
 
     s->playing = false;
-    af_retire_sound(s);
+    af_free_sound(s->sound);
+    s->sound = NULL;
 
     s->info     = af_info_none;
     s->duration = 0.0;
