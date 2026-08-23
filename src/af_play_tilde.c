@@ -56,7 +56,7 @@ static void af_play_tick(t_af_play *x)
         af_play_fail(x, "underflow");
     }
     if (events & AF_EVENT_EOF) {
-        af_stream_set_running(x->x_stream, 0);
+        af_stream_set_playing(x->x_stream, 0);
         outlet_anything(x->x_msgout, gensym("eof"), 0, NULL);
     }
 }
@@ -102,12 +102,12 @@ static void af_play_close(t_af_play *x)
 
 static void af_play_play(t_af_play *x, t_floatarg f)
 {
-    af_stream_set_running(x->x_stream, f != 0);
+    af_stream_set_playing(x->x_stream, f != 0);
 }
 
 static void af_play_loop(t_af_play *x, t_floatarg f)
 {
-    af_stream_set_loop(x->x_stream, f != 0);
+    af_stream_set_looping(x->x_stream, f != 0);
 }
 
 static void af_play_speed(t_af_play *x, t_floatarg f)

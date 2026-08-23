@@ -280,7 +280,7 @@ static void test_truncated(void)
     ok(af_stream_open(s, fixture("truncated.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     d = drain(s, buf, FIXTURE_FRAMES * 2, 256, 1, 3000);
 
     ok(!d.timed_out, "timed out draining a truncated file");
@@ -316,7 +316,7 @@ static void test_read_whole_file(const char *name, uint32_t channels)
     limit = (size_t)FIXTURE_FRAMES * 2;
     buf = scratch_buffer(limit, channels);
 
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     d = drain(s, buf, limit, 64, channels, 5000);
 
     ok(!d.timed_out, "timed out");
@@ -353,7 +353,7 @@ static void test_seek(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_f32.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer(4096, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
 
     /* Let the buffer fill with the start of the file, so that a seek that
      * failed to take would be caught handing back frames from around zero. */
@@ -420,7 +420,7 @@ static void test_speed(void)
 
     buf = scratch_buffer(FIXTURE_FRAMES, 1);
     af_stream_set_speed(s, 2.0);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
 
     d = drain(s, buf, FIXTURE_FRAMES, 64, 1, 5000);
     ok(!d.timed_out, "timed out");
@@ -445,7 +445,7 @@ static void test_speed(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
     buf = scratch_buffer(FIXTURE_FRAMES * 3, 1);
     af_stream_set_speed(s, 0.5);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     d = drain(s, buf, FIXTURE_FRAMES * 3, 64, 1, 8000);
     ok(!d.timed_out, "timed out");
     ok(labs((long)d.frames - (long)(FIXTURE_FRAMES * 2)) <= 8,
@@ -462,7 +462,7 @@ static void test_speed(void)
         ok(af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK, "open");
         ok(info.samplerate == 48000.0, "the file reports %g Hz", info.samplerate);
         buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
-        af_stream_set_running(s, 1);
+        af_stream_set_playing(s, 1);
         d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 5000);
         ok(!d.timed_out, "timed out");
         /* 22050 frames of 48000 Hz material is 0.459 s, which is 20256 frames
@@ -488,8 +488,8 @@ static void test_loop(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer((size_t)FIXTURE_FRAMES * 2 + 4096, 1);
-    af_stream_set_loop(s, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_looping(s, 1);
+    af_stream_set_playing(s, 1);
 
     d = drain(s, buf, FIXTURE_FRAMES + 4096, 64, 1, 8000);
     ok(!d.timed_out, "timed out");
@@ -514,7 +514,7 @@ static void test_loop(void)
     begin("switching looping off lets the file end");
     pos_before = af_stream_tell_frames(s);
     ok(pos_before <= (uint64_t)FIXTURE_FRAMES, "position is inside the file");
-    af_stream_set_loop(s, 0);
+    af_stream_set_looping(s, 0);
     d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 8000);
     ok(d.eofs == 1, "eof reported %d times after looping was switched off", d.eofs);
 
@@ -548,7 +548,7 @@ static void test_cold_start_is_not_a_dropout(void)
            "open");
 
         /* No settling time anywhere: this is the point of the test. */
-        af_stream_set_running(s, 1);
+        af_stream_set_playing(s, 1);
         for (i = 0; i < 8; i++) {
             af_stream_read(s, buf, 64);
             if (af_stream_take_events(s) & AF_EVENT_UNDERFLOW) reports++;
@@ -581,7 +581,7 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer(4096, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     drain(s, buf, 1024, 64, 1, 2000);
     af_stream_take_events(s);
 
@@ -627,8 +627,8 @@ static void test_underflow(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer(8192, 1);
-    af_stream_set_loop(s, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_looping(s, 1);
+    af_stream_set_playing(s, 1);
     ok(settle(s, buf, 64), "the stream never got going");
 
     af_stream_set_speed(s, AF_SPEED_MAX);
@@ -675,7 +675,7 @@ static void test_output_samplerate_change(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer(8192, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     d = drain(s, buf, 4096, 64, 1, 3000);
     ok(d.frames == 4096, "got %lu frames before the rate changed",
        (unsigned long)d.frames);
@@ -731,7 +731,7 @@ static void test_open_replaces(void)
     ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
 
     buf = scratch_buffer(4096, 1);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     drain(s, buf, 2048, 64, 1, 2000);
 
     ok(af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK,
@@ -749,7 +749,7 @@ static void test_open_replaces(void)
     begin("close, and what happens after it");
     af_stream_close(s);
     ok(af_stream_info(s, &info) == AF_ERR_NOFILE, "info after close");
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     ok(af_stream_read(s, buf, 64) == 0, "reading after close produced frames");
 
     free(buf);
@@ -775,7 +775,7 @@ static void test_channels(void)
     ok(info.channels == 2, "channels %u", info.channels);
 
     buf = scratch_buffer(4096, 2);
-    af_stream_set_running(s, 1);
+    af_stream_set_playing(s, 1);
     d = drain(s, buf, 1024, 64, 2, 3000);
     ok(d.frames == 1024, "got %lu frames", (unsigned long)d.frames);
 
@@ -854,8 +854,8 @@ static void test_teardown_while_playing(void)
         ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
         ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK,
            "open");
-        af_stream_set_loop(s, 1);
-        af_stream_set_running(s, 1);
+        af_stream_set_looping(s, 1);
+        af_stream_set_playing(s, 1);
         af_stream_read(s, buf, 64);
 
         /* No settling time on purpose: the stream is most likely to be

@@ -43,8 +43,8 @@ struct af_stream {
     /* In the engine's frames; 0 when the container records no length. */
     uint64_t length;
 
-    bool running;
-    bool loop;
+    bool playing;
+    bool looping;
 
     /* What the caller has been handed, in the engine's frames. The sound's own
      * cursor is the read head, which runs ahead of it. */
@@ -349,7 +349,7 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     ma_sound_get_length_in_pcm_frames(sound, &length);
     if (length == 0) {
         /* Nothing to count down to, so the end has to come from the decoder. */
-        const bool looping = s->loop;
+        const bool looping = s->looping;
 
         af_free_sound(sound);
         sound  = NULL;
@@ -366,7 +366,7 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
         return AF_ERR_MEMORY;
     }
 
-    s->running = false;
+    s->playing = false;
     af_retire_sound(s);
 
     s->sound = sound;
@@ -393,7 +393,7 @@ void af_stream_close(af_stream *s)
 {
     if (s == NULL) return;
 
-    s->running = false;
+    s->playing = false;
     af_retire_sound(s);
 
     s->info = af_info_none;
@@ -403,29 +403,29 @@ void af_stream_close(af_stream *s)
     af_forget_position(s, 0.0);
 }
 
-void af_stream_set_running(af_stream *s, int running)
+void af_stream_set_playing(af_stream *s, int playing)
 {
     if (s == NULL) return;
 
-    s->running = running != 0;
+    s->playing = playing != 0;
     if (s->sound == NULL) return;
 
     /* Starting a sound that reached the end rewinds it, which is not what
      * `run 1` after an eof means. */
-    if (running != 0) {
+    if (playing != 0) {
         if (!ma_sound_at_end(s->sound)) ma_sound_start(s->sound);
     } else {
         ma_sound_stop(s->sound);
     }
 }
 
-void af_stream_set_loop(af_stream *s, int loop)
+void af_stream_set_looping(af_stream *s, int looping)
 {
     if (s == NULL) return;
 
-    s->loop = loop != 0;
+    s->looping = looping != 0;
     if (s->sound != NULL && s->length == 0) {
-        ma_sound_set_looping(s->sound, (loop != 0) ? MA_TRUE : MA_FALSE);
+        ma_sound_set_looping(s->sound, (looping != 0) ? MA_TRUE : MA_FALSE);
     }
 }
 
@@ -445,13 +445,13 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
 {
     char    *path;
     uint64_t position;
-    bool     was_running;
+    bool     was_playing;
 
     if (s == NULL || !(samplerate > 0.0)) return;
     if ((uint32_t)(samplerate + 0.5) == (uint32_t)(s->out_rate + 0.5)) return;
 
     position    = af_stream_tell_frames(s);
-    was_running = s->running;
+    was_playing = s->playing;
     path        = s->path;
     s->path     = NULL;         /* the reopen below takes its own copy */
 
@@ -464,7 +464,7 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
         af_stream_open(s, path, NULL) == AF_OK)
     {
         af_stream_seek_frames(s, position);
-        af_stream_set_running(s, was_running ? 1 : 0);
+        af_stream_set_playing(s, was_playing ? 1 : 0);
         free(path);
         return;
     }
@@ -492,7 +492,7 @@ af_status af_stream_seek_frames(af_stream *s, uint64_t frame)
      * of a rewind the seek below replaces. */
     if (ma_sound_at_end(s->sound)) {
         ma_sound_start(s->sound);
-        if (!s->running) ma_sound_stop(s->sound);
+        if (!s->playing) ma_sound_stop(s->sound);
     }
 
     if (ma_sound_seek_to_pcm_frame(s->sound, target) != MA_SUCCESS) {
@@ -579,7 +579,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     ma_uint64 read = 0;
 
     if (s == NULL || dst == NULL || frames == 0) return 0;
-    if (s->sound == NULL || !s->running) return 0;
+    if (s->sound == NULL || !s->playing) return 0;
 
     sound = s->sound;
 
@@ -596,7 +596,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     length   = s->length;
     want     = frames;
 
-    if (!s->loop && length > 0) {
+    if (!s->looping && length > 0) {
         double remaining = (double)length - position;
         double out_left  = (remaining > 0.0) ? remaining / per_out : 0.0;
 
@@ -635,7 +635,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
     if (read == frames) s->primed = true;
 
     position += (double)read * per_out;
-    if (s->loop && length > 0) {
+    if (s->looping && length > 0) {
         while (position >= (double)length) position -= (double)length;
     }
 
