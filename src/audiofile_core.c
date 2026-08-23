@@ -40,14 +40,15 @@ struct af_stream {
     char    *path;
     af_info  info;
 
-    /* In the engine's frames; 0 when the container records no length. */
-    uint64_t length;
+    /* Seconds, and false when the container records no length. */
+    double duration;
+    bool   have_duration;
 
     bool playing;
     bool looping;
 
-    /* What the caller has been handed, in the engine's frames. The sound's own
-     * cursor is the read head, which runs ahead of it. */
+    /* What the caller has been handed, in seconds. The sound's own cursor is
+     * the read head, which runs ahead of it. */
     double position;
 
     /* Set by a seek, cleared by the block that seek is applied in. */
@@ -163,21 +164,11 @@ af_status af_probe(const char *path, af_info *out)
     return status;
 }
 
-/* The sound counts in the engine's frames, the interface in the file's. */
-static double af_engine_per_file(const af_stream *s)
+/* The sound counts in frames of the engine's rate, whatever the file's own
+ * rate is; everything here counts in seconds. */
+static uint64_t af_engine_frames(const af_stream *s, double seconds)
 {
-    if (s->info.samplerate <= 0.0) return 1.0;
-    return s->out_rate / s->info.samplerate;
-}
-
-static uint64_t af_to_engine_frames(const af_stream *s, uint64_t file_frame)
-{
-    return (uint64_t)((double)file_frame * af_engine_per_file(s) + 0.5);
-}
-
-static uint64_t af_to_file_frames(const af_stream *s, uint64_t engine_frame)
-{
-    return (uint64_t)((double)engine_frame / af_engine_per_file(s) + 0.5);
+    return (uint64_t)(seconds * s->out_rate + 0.5);
 }
 
 /* Not the sound's cursor, which already reports a seek that has yet to
@@ -369,9 +360,10 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     s->playing = false;
     af_retire_sound(s);
 
-    s->sound = sound;
-    s->info  = file_info;
-    s->length = (uint64_t)length;
+    s->sound         = sound;
+    s->info          = file_info;
+    s->have_duration = length > 0;
+    s->duration      = (double)length / s->out_rate;
     free(s->path);
     s->path = path_copy;
     af_forget_position(s, 0.0);
@@ -396,8 +388,9 @@ void af_stream_close(af_stream *s)
     s->playing = false;
     af_retire_sound(s);
 
-    s->info = af_info_none;
-    s->length = 0;
+    s->info          = af_info_none;
+    s->duration      = 0.0;
+    s->have_duration = false;
     free(s->path);
     s->path = NULL;
     af_forget_position(s, 0.0);
@@ -424,7 +417,7 @@ void af_stream_set_looping(af_stream *s, int looping)
     if (s == NULL) return;
 
     s->looping = looping != 0;
-    if (s->sound != NULL && s->length == 0) {
+    if (s->sound != NULL && !s->have_duration) {
         ma_sound_set_looping(s->sound, (looping != 0) ? MA_TRUE : MA_FALSE);
     }
 }
@@ -443,27 +436,28 @@ void af_stream_set_speed(af_stream *s, double speed)
  * rate rebuilds it and reopens the file where it was. */
 void af_stream_set_output_samplerate(af_stream *s, double samplerate)
 {
-    char    *path;
-    uint64_t position;
-    bool     was_playing;
+    char  *path;
+    double position;
+    bool   was_playing;
 
     if (s == NULL || !(samplerate > 0.0)) return;
     if ((uint32_t)(samplerate + 0.5) == (uint32_t)(s->out_rate + 0.5)) return;
 
-    position    = af_stream_tell_frames(s);
+    position    = s->position;
     was_playing = s->playing;
     path        = s->path;
     s->path     = NULL;         /* the reopen below takes its own copy */
 
     af_engine_stop(s);
-    s->length = 0;
-    s->info = af_info_none;
+    s->duration      = 0.0;
+    s->have_duration = false;
+    s->info          = af_info_none;
 
     s->out_rate = samplerate;
     if (af_engine_start(s) == AF_OK && path != NULL &&
         af_stream_open(s, path, NULL) == AF_OK)
     {
-        af_stream_seek_frames(s, position);
+        af_stream_seek_seconds(s, position);
         af_stream_set_playing(s, was_playing ? 1 : 0);
         free(path);
         return;
@@ -476,17 +470,13 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
     s->path = path;
 }
 
-af_status af_stream_seek_frames(af_stream *s, uint64_t frame)
+af_status af_stream_seek_seconds(af_stream *s, double seconds)
 {
-    uint64_t target, length;
-
     if (s == NULL) return AF_ERR_ARGS;
     if (s->sound == NULL) return AF_ERR_NOFILE;
 
-    if (s->info.frames > 0 && frame > s->info.frames) frame = s->info.frames;
-    target = af_to_engine_frames(s, frame);
-    length = s->length;
-    if (length > 0 && target > length) target = length;
+    if (!(seconds > 0.0)) seconds = 0.0;
+    if (s->have_duration && seconds > s->duration) seconds = s->duration;
 
     /* A sound at the end ignores a seek. Starting it clears that, at the cost
      * of a rewind the seek below replaces. */
@@ -495,43 +485,33 @@ af_status af_stream_seek_frames(af_stream *s, uint64_t frame)
         if (!s->playing) ma_sound_stop(s->sound);
     }
 
-    if (ma_sound_seek_to_pcm_frame(s->sound, target) != MA_SUCCESS) {
+    if (ma_sound_seek_to_pcm_frame(s->sound, af_engine_frames(s, seconds)) != MA_SUCCESS) {
         return AF_ERR_SEEK;
     }
-    af_forget_position(s, (double)target);
+    af_forget_position(s, seconds);
     s->settling = true;
 
     return AF_OK;
 }
 
-af_status af_stream_seek_seconds(af_stream *s, double seconds)
+af_status af_stream_seek_frames(af_stream *s, uint64_t frame)
 {
-    double rate;
-    double frame;
-
     if (s == NULL) return AF_ERR_ARGS;
-    if (seconds < 0.0) seconds = 0.0;
+    if (s->info.samplerate <= 0.0) return AF_ERR_NOFILE;
 
-    rate = s->info.samplerate;
-    if (rate <= 0.0) return AF_ERR_NOFILE;
-
-    frame = seconds * rate;
-    if (frame > 1.8e19) frame = 1.8e19;
-
-    return af_stream_seek_frames(s, (uint64_t)frame);
-}
-
-uint64_t af_stream_tell_frames(af_stream *s)
-{
-    if (s == NULL || s->sound == NULL) return 0;
-    return af_to_file_frames(s, (uint64_t)(s->position + 0.5));
+    return af_stream_seek_seconds(s, (double)frame / s->info.samplerate);
 }
 
 double af_stream_tell_seconds(af_stream *s)
 {
     if (s == NULL || s->sound == NULL) return 0.0;
-    if (s->out_rate <= 0.0) return 0.0;
-    return s->position / s->out_rate;
+    return s->position;
+}
+
+uint64_t af_stream_tell_frames(af_stream *s)
+{
+    if (s == NULL || s->sound == NULL) return 0;
+    return (uint64_t)(s->position * s->info.samplerate + 0.5);
 }
 
 int af_stream_pending(af_stream *s)
@@ -572,8 +552,8 @@ static void af_report_underflow(af_stream *s)
 size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 {
     ma_sound *sound;
-    double    per_out, position;
-    uint64_t  length, available;
+    double    speed, position, block_seconds;
+    uint64_t  available;
     size_t    want;
     bool      at_end = false;
     ma_uint64 read = 0;
@@ -588,17 +568,18 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
         return 0;
     }
 
-    /* Each output frame consumes `speed` frames of the file. */
-    per_out = (double)ma_sound_get_pitch(sound);
-    if (per_out <= 0.0) per_out = 1.0;
+    /* One output frame carries `speed` seconds of the file, at the engine's
+     * rate. */
+    speed = (double)ma_sound_get_pitch(sound);
+    if (speed <= 0.0) speed = 1.0;
+    block_seconds = speed / s->out_rate;
 
     position = s->position;
-    length   = s->length;
     want     = frames;
 
-    if (!s->looping && length > 0) {
-        double remaining = (double)length - position;
-        double out_left  = (remaining > 0.0) ? remaining / per_out : 0.0;
+    if (!s->looping && s->have_duration) {
+        double remaining = s->duration - position;
+        double out_left  = (remaining > 0.0) ? remaining / block_seconds : 0.0;
 
         if (out_left <= (double)want) {
             want   = (size_t)out_left;
@@ -610,7 +591,7 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
      * rather than a stall. */
     available = af_available(sound);
     if (!at_end) {
-        double servable = (double)available / per_out;
+        double servable = (double)available / speed;
         if (servable < (double)want) want = (size_t)servable;
     }
 
@@ -634,9 +615,9 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
 
     if (read == frames) s->primed = true;
 
-    position += (double)read * per_out;
-    if (s->looping && length > 0) {
-        while (position >= (double)length) position -= (double)length;
+    position += (double)read * block_seconds;
+    if (s->looping && s->have_duration) {
+        while (position >= s->duration) position -= s->duration;
     }
 
     if (read < frames) {
@@ -644,8 +625,8 @@ size_t af_stream_read(af_stream *s, float *dst, size_t frames)
             /* The data source loops, so the play head has to be put back on
              * the end it just passed. */
             if (at_end) {
-                position = (double)length;
-                ma_sound_seek_to_pcm_frame(sound, length);
+                position = s->duration;
+                ma_sound_seek_to_pcm_frame(sound, af_engine_frames(s, s->duration));
             }
             af_report_eof(s);
         } else {

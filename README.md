@@ -226,19 +226,27 @@ Two engine settings are chosen rather than defaulted:
 
 `speed` is the sound's pitch, which resamples.
 
-### Two frame counts
+### Seconds inside, frames at the edges
 
-The interface counts the file's own frames. Everything inside a sound is counted
-at the engine's rate, so a 48 kHz file in a 44.1 kHz Pd is 20258 frames long
-rather than 22050. Positions are scaled at that boundary and nowhere else.
+Position and duration are held in seconds. Frames are ambiguous here: a
+`ma_sound` counts in frames of the engine's rate whatever the file's own rate
+is, so a 48 kHz file in a 44.1 kHz Pd is 20258 frames long inside and 22050
+frames long to a patch, and code that mixes the two is wrong in a way that only
+shows up on files that need resampling. Seconds are the same number on both
+sides. They are converted to frames in three places: seeking, which is what
+miniaudio's API takes, `af_stream_tell_frames`, and the file's length when it is
+read at open.
+
+A double holds a second to about 1e-16, which is a five ten-thousandth of a
+frame after a day of audio.
 
 ### Position
 
-The core counts the frames it hands back rather than asking the sound.
+The core counts what it has handed back rather than asking the sound.
 `ma_sound_get_cursor_in_pcm_frames` is the read head: the pitch resampler takes
 in what it needs to fill a block, so the cursor runs ahead of what has been
-heard, further at low speeds. Counting output frames against the speed gives the
-position of the audio just delivered, and wraps with the file.
+heard, further at low speeds. Advancing by the frames returned times the speed
+gives the position of the audio just delivered, and wraps with the file.
 
 ### Looping, and where a file ends
 
