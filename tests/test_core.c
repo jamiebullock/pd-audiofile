@@ -103,7 +103,6 @@ static void begin(const char *name)
 typedef struct {
     size_t frames;
     int    eofs;
-    int    underflows;
     int    timed_out;
 } af_drain;
 
@@ -126,9 +125,7 @@ static af_drain drain(af_stream *s, float *out, size_t limit,
         got = af_stream_read(s, out ? out + d.frames * channels : NULL, want);
 
         {
-            unsigned events = af_stream_read_events(s);
-            if (events & AF_EVENT_EOF)       d.eofs++;
-            if (events & AF_EVENT_UNDERFLOW) d.underflows++;
+            if (af_stream_read_events(s) & AF_EVENT_EOF) d.eofs++;
         }
 
         if (got == 0) {
@@ -273,15 +270,12 @@ static void test_truncated(void)
     float     *buf;
     af_drain   d;
 
-    if (!exists(fixture("truncated.wav"))) { skip("truncated.wav"); return; }
-
     begin("a truncated file reads short rather than crashing");
 
     status = af_probe(fixture("truncated.wav"), &info);
-    if (status != AF_OK) {
-        ok(1, "rejected outright, which is a fair answer");
-        return;
-    }
+    ok(status == AF_OK, "status %s: the header describes the file it meant "
+                        "to be", af_status_string(status));
+    if (status != AF_OK) return;
 
     ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
     ok(af_stream_open(s, fixture("truncated.wav"), &info) == AF_OK, "open");
@@ -401,6 +395,10 @@ static void test_seek(void)
     begin("seeking past the end clamps, and reads as end of file");
     ok(af_stream_seek_seconds(s, FIXTURE_FRAMES * 4 / FIXTURE_RATE) == AF_OK,
        "seek past the end");
+    ok(!af_stream_pending(s), "an event was waiting before anything was read");
+    af_stream_read(s, buf, 64);
+    ok(af_stream_pending(s), "nothing was waiting after reading past the end");
+    ok(af_stream_pending(s), "the second look found nothing: it was consumed");
     d = drain(s, buf, 512, 64, 1, 1000);
     ok(d.eofs == 1, "eof reported %d times after seeking past the end", d.eofs);
     ok(d.frames == 0, "%lu frames came back from beyond the end",
@@ -463,23 +461,19 @@ static void test_speed(void)
     af_stream_free(s);
 
     begin("a file at a different rate is resampled to the output rate");
-    if (!exists(fixture("sine_mono_48000_s16.wav"))) {
-        skip("sine_mono_48000_s16.wav");
-    } else {
-        ok(af_stream_new(&s, 1, 44100.0) == AF_OK, "af_stream_new");
-        ok(af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK, "open");
-        ok(info.samplerate == 48000.0, "the file reports %g Hz", info.samplerate);
-        buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
-        af_stream_set_playing(s, 1);
-        d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 5000);
-        ok(!d.timed_out, "timed out");
-        /* 22050 frames of 48000 Hz material is 0.459 s, which is 20256 frames
-         * at 44100 Hz. */
-        ok(labs((long)d.frames - 20256L) <= 16,
-           "produced %lu frames, wanted about 20256", (unsigned long)d.frames);
-        free(buf);
-        af_stream_free(s);
-    }
+    ok(af_stream_new(&s, 1, 44100.0) == AF_OK, "af_stream_new");
+    ok(af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK, "open");
+    ok(info.samplerate == 48000.0, "the file reports %g Hz", info.samplerate);
+    buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 5000);
+    ok(!d.timed_out, "timed out");
+    /* 22050 frames of 48000 Hz material is 0.459 s, which is 20256 frames
+     * at 44100 Hz. */
+    ok(labs((long)d.frames - 20256L) <= 16,
+       "produced %lu frames, wanted about 20256", (unsigned long)d.frames);
+    free(buf);
+    af_stream_free(s);
 }
 
 static void test_loop(void)
@@ -771,11 +765,6 @@ static void test_channels(void)
     float     *buf;
     af_drain   d;
 
-    if (!exists(fixture("sine_stereo_44100_s16.wav"))) {
-        skip("sine_stereo_44100_s16.wav");
-        return;
-    }
-
     begin("a stereo file into two channels keeps them apart");
 
     ok(af_stream_new(&s, 2, FIXTURE_RATE) == AF_OK, "af_stream_new");
@@ -809,11 +798,6 @@ static void test_info_describes_the_file(void)
 {
     af_stream *s;
     af_info    stream_info, probe_info;
-
-    if (!exists(fixture("sine_stereo_44100_s16.wav"))) {
-        skip("sine_stereo_44100_s16.wav");
-        return;
-    }
 
     begin("info describes the file, not the playback settings");
 
