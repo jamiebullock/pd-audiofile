@@ -15,13 +15,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Also sizes the node caches a seek plays through, so one Pd block of stale
- * audio rather than the 480-frame default. */
-#define AF_PERIOD_FRAMES 64
+/* Set to the default Pd Blocksize */
+#define AF_MINIAUDIO_PERIOD_FRAMES 64
 
-/* One sound into the endpoint, against a default of half a megabyte per
- * channel. */
-#define AF_PREMIX_STACK_BYTES 16384
+/* More than enough for a block of 8 channels floating point audio */
+#define AF_MINIAUDIO_STACK_BYTES 16384
 
 #define AF_FALLBACK_SAMPLERATE 44100.0
 
@@ -30,7 +28,7 @@ static const af_info af_info_none = { 0.0, 0, 0, "unknown" };
 struct af_stream {
     uint32_t channels;
     double   out_rate;
-    double   speed;         /* the sound carries it as its pitch */
+    double   speed;
 
     ma_engine engine;
     bool      engine_ready;
@@ -40,17 +38,12 @@ struct af_stream {
     char    *path;
     af_info  info;
 
-    /* Seconds; 0 when the container records no length. */
+    /* Seconds */
     double duration;
+    double position;
 
     bool playing;
     bool looping;
-
-    /* What the caller has been handed, in seconds. The sound's own cursor is
-     * the read head, which runs ahead of it. */
-    double position;
-
-    /* Set by a seek, cleared by the block that seek is applied in. */
     bool seek_pending;
 
     bool eof_reported;
@@ -110,8 +103,6 @@ static char *af_copy_string(const char *text)
     return copy;
 }
 
-/* The decoder must have had no format or channel count forced on it, or it
- * reports the settings it was given rather than the file's. */
 static af_status af_read_info(ma_decoder *decoder, af_info *out)
 {
     ma_format  format      = ma_format_unknown;
@@ -163,15 +154,11 @@ af_status af_probe(const char *path, af_info *out)
     return status;
 }
 
-/* The sound counts in frames of the engine's rate, whatever the file's own
- * rate is; everything here counts in seconds. */
 static uint64_t af_seconds_to_frames(const af_stream *s, double seconds)
 {
     return (uint64_t)(seconds * s->out_rate + 0.5);
 }
 
-/* Not the sound's cursor, which already reports a seek that has yet to
- * happen. */
 static uint64_t af_frames_read(ma_sound *sound)
 {
     ma_uint64 frames = 0;
@@ -197,23 +184,19 @@ static af_status af_engine_start(af_stream *s)
 {
     ma_engine_config config = ma_engine_config_init();
 
-    /* This ran in whichever unit compiled miniaudio: a count of anything but
-     * one means it saw different MA_NO_* macros, and the two disagree about
-     * where the fields of this struct are. */
     if (config.listenerCount != 1) return AF_ERR_CONFIG;
 
     config.noDevice               = MA_TRUE;
     config.channels               = s->channels;
     config.sampleRate             = (ma_uint32)(s->out_rate + 0.5);
-    config.periodSizeInFrames     = AF_PERIOD_FRAMES;
-    config.preMixStackSizeInBytes = AF_PREMIX_STACK_BYTES;
+    config.periodSizeInFrames     = AF_MINIAUDIO_PERIOD_FRAMES;
+    config.preMixStackSizeInBytes = AF_MINIAUDIO_STACK_BYTES;
 
     if (ma_engine_init(&config, &s->engine) != MA_SUCCESS) return AF_ERR_MEMORY;
     s->engine_ready = true;
     return AF_OK;
 }
 
-/* The engine holds it in its node graph until it is uninitialised. */
 static void af_free_sound(ma_sound *sound)
 {
     if (sound == NULL) return;
@@ -287,8 +270,6 @@ static bool af_all_zero(const float *frames, size_t count)
     return true;
 }
 
-/* Opens `path` into a sound of its own, so that a failure leaves the sound
- * already playing untouched. */
 static af_status af_sound_open(af_stream *s, const char *path, bool looping,
                                ma_sound **out)
 {
@@ -303,7 +284,6 @@ static af_status af_sound_open(af_stream *s, const char *path, bool looping,
 
     result = ma_sound_init_from_file(&s->engine, path, flags, NULL, NULL, sound);
     if (result != MA_SUCCESS) {
-        /* Nothing was initialised, so nothing may be uninitialised. */
         free(sound);
         return af_status_from_ma(result);
     }
@@ -323,7 +303,6 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     if (s == NULL || path == NULL) return AF_ERR_ARGS;
     if (!s->engine_ready) return AF_ERR_CONFIG;
 
-    /* Probed separately so that the reported info describes the file. */
     status = af_probe(path, &file_info);
     if (status != AF_OK) return status;
 
@@ -332,7 +311,7 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
 
     ma_sound_get_length_in_pcm_frames(sound, &length);
     if (length == 0) {
-        /* Nothing to count down to, so the end has to come from the decoder. */
+        /* No length in the file so the end has to come from the decoder. */
         const bool looping = s->looping;
 
         af_free_sound(sound);
@@ -342,8 +321,6 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     }
     ma_sound_set_pitch(sound, (float)s->speed);
 
-    /* The path is what a sample-rate change reopens from, so a stream that
-     * cannot remember it is not open. */
     path_copy = af_copy_string(path);
     if (path_copy == NULL) {
         af_free_sound(sound);
@@ -397,8 +374,6 @@ void af_stream_set_playing(af_stream *s, int playing)
     s->playing = playing;
     if (s->sound == NULL) return;
 
-    /* Starting a sound that reached the end rewinds it, which is not what
-     * `run 1` after an eof means. */
     if (playing) {
         if (!ma_sound_at_end(s->sound)) ma_sound_start(s->sound);
     } else {
@@ -426,8 +401,6 @@ void af_stream_set_speed(af_stream *s, double speed)
     if (s->sound != NULL) ma_sound_set_pitch(s->sound, (float)speed);
 }
 
-/* The engine's sample rate is fixed when it is created, so a change of Pd's
- * rate rebuilds it and reopens the file where it was. */
 void af_stream_set_output_samplerate(af_stream *s, double samplerate)
 {
     char  *path;
@@ -440,7 +413,7 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
     position    = s->position;
     was_playing = s->playing;
     path        = s->path;
-    s->path     = NULL;         /* the reopen below takes its own copy */
+    s->path     = NULL;
 
     af_engine_stop(s);
     s->duration = 0.0;
@@ -456,9 +429,6 @@ void af_stream_set_output_samplerate(af_stream *s, double samplerate)
         return;
     }
 
-    /* Out of memory rebuilding the engine, or reopening the file into it.
-     * There is nothing to report through: the object is silent until the next
-     * open, which the path kept here lets a later rate change attempt. */
     free(s->path);
     s->path = path;
 }
@@ -471,8 +441,6 @@ af_status af_stream_seek_seconds(af_stream *s, double seconds)
     if (!(seconds > 0.0)) seconds = 0.0;
     if (s->duration > 0.0 && seconds > s->duration) seconds = s->duration;
 
-    /* A sound at the end ignores a seek. Starting it clears that, at the cost
-     * of a rewind the seek below replaces. */
     if (ma_sound_at_end(s->sound)) {
         ma_sound_start(s->sound);
         if (!s->playing) ma_sound_stop(s->sound);

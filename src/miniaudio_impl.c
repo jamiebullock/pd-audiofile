@@ -15,8 +15,7 @@
 #endif
 
 /* miniaudio compiles its Vorbis backend only when stb_vorbis' header guard is
- * already visible, so the declarations precede it and the implementation
- * follows it. */
+ * already visible. */
 #if AUDIOFILE_WITH_VORBIS
     #define STB_VORBIS_HEADER_ONLY
     #include "stb_vorbis.c"
