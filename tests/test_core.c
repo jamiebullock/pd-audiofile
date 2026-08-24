@@ -443,7 +443,7 @@ SUITE(reading)
 /* Seeking                                                            */
 /* ------------------------------------------------------------------ */
 
-TEST a_seek_lands_where_it_was_asked(void)
+TEST a_seek_lands_where_requested(void)
 {
     af_stream *s;
     af_info    info;
@@ -486,7 +486,7 @@ TEST a_seek_lands_where_it_was_asked(void)
     PASS();
 }
 
-TEST repeated_seeks_land_where_they_were_asked(void)
+TEST repeated_seeks_land_where_requested(void)
 {
     af_stream *s;
     af_info    info;
@@ -566,8 +566,8 @@ TEST a_seek_with_no_file_open_is_an_error(void)
 
 SUITE(seeking)
 {
-    RUN_TEST(a_seek_lands_where_it_was_asked);
-    RUN_TEST(repeated_seeks_land_where_they_were_asked);
+    RUN_TEST(a_seek_lands_where_requested);
+    RUN_TEST(repeated_seeks_land_where_requested);
     RUN_TEST(a_seek_past_the_end_clamps);
     RUN_TEST(a_seek_with_no_file_open_is_an_error);
 }
