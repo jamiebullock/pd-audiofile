@@ -96,18 +96,13 @@ Rules:
 
 ## Building
 
-C99 throughout, so any toolchain from the last fifteen years will do. Nothing
-else is needed beyond the dependencies below.
-
 ```sh
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The build fetches what it cannot find, at pinned versions: Pure Data 0.55-2 for
-`m_pd.h`, miniaudio 0.11.25, and greatest 1.5.0, which the tests are written
-against. Point it at copies you already have to skip that:
+The build fetches dependencies. This can be skipped by specifying directories:
 
 ```sh
 cmake -S . -B build \
@@ -135,15 +130,16 @@ alone does not provide: add `-DPD_LIBRARY=<path to pd.lib>`.
 cmake --install build --prefix ~/Documents/Pd/externals
 ```
 
-That writes an `audiofile/` directory holding the external, the help patches and
-the meta patch: the layout Pd expects on its search path, and the one
-[deken](https://github.com/pure-data/deken) packages.
+Writes an `audiofile/` directory holding the external, the help patches and
+the meta patch.
+[deken](https://github.com/pure-data/deken) package layout is followed.
 
 ## Embedding: sharing miniaudio with a host application
 
-miniaudio's implementation is compiled in exactly one translation unit, so an
+miniaudio's implementation is compiled in exactly one unit, so an
 external loaded into an application that already compiles miniaudio must not
-compile a second copy. `AUDIOFILE_USE_HOST_MINIAUDIO` decides:
+compile a second copy. This can be controlled with the
+`AUDIOFILE_USE_HOST_MINIAUDIO` flag:
 
 - **`OFF`**, the default: `src/miniaudio_impl.c` is compiled, with
   `MA_NO_DEVICE_IO`, `MA_NO_GENERATION` and `MA_NO_ENCODING`. That keeps the
@@ -166,28 +162,15 @@ cmake -S . -B build -DAUDIOFILE_USE_HOST_MINIAUDIO=ON \
 
 ## Testing
 
-`tests/test_core.c` covers the core with no Pd involved, in seven suites run by
-greatest: the header facts of each fixture, a file read end to end against its
-frame count, the phase of the block after a seek, output length against speed
-and sample-rate conversion, a forced stall reported once, and the error paths
-for a missing, malformed or truncated file.
+`tests/test_core.c` runs the core under greatest, with no Pd involved.
+`tests/run_pd_smoke.py` loads the library into a headless Pd and checks the
+objects create, answer and report `eof`; point it at a Pd with
+`-DPD_EXECUTABLE=` or the `PD` environment variable.
 
-Fixtures are generated rather than committed, by `tests/make_fixtures.py`: one
-sine, 100 frames per cycle, as WAV PCM-16, WAV float-32, 16- and 24-bit AIFF,
-FLAC, MP3 and Vorbis, plus a truncated WAV and a WAV with a chunk after the
-audio. A signal known frame by frame lets a test say which frame a seek
-reached.
-
-The script needs `soundfile`, which is `pip install soundfile`. Without it the
-fixtures are not generated and both tests skip; a Python that refuses to
-install into itself, as Homebrew's does, wants a virtual environment and
-`-DPython3_EXECUTABLE=` pointing at it.
-
-`tests/run_pd_smoke.py` loads the library into a headless Pd and checks that the
-objects create, answer `info`, play and report `eof`. Its patch sends
-`open ..., play 1` as a single message with no gap. It skips itself
-when no Pd can be found; point it at one with `-DPD_EXECUTABLE=` or the `PD`
-environment variable.
+`tests/make_fixtures.py` writes the fixtures, one sine at 100 frames per cycle
+in each format the tests read, and needs `soundfile`. Without it, or without a
+Pd, the tests skip rather than fail. A Python that refuses `pip install`, as
+Homebrew's does, wants a virtual environment and `-DPython3_EXECUTABLE=`.
 
 CI builds and tests macOS, Linux and Windows.
 
@@ -214,23 +197,15 @@ perform routine, and a libpd host serialises its calls as libpd requires.
 
 ### Playback
 
-Each stream owns a miniaudio engine created with `noDevice`, so nothing is
-opened on the audio hardware and Pd's perform routine pulls frames from it. The
-engine's channel count is the object's outlet count and its sample rate is Pd's.
-One `ma_sound` stands for the open file, streaming from disk rather than decoded
-up front, with spatialization off so that a mono file into a stereo object is
-not panned.
-
 Two engine settings are chosen rather than defaulted:
 
-- `periodSizeInFrames` is one Pd block. It also sizes the node graph's caches,
-  which a seek plays through: at the 480-frame default a seek is heard seven
-  blocks late, at 64 one.
+- `periodSizeInFrames` is 64, Pd's default block size, which the core cannot
+  read from Pd. It also sizes the node graph's caches, which a seek plays
+  through: at the 480-frame default a seek is heard seven blocks late, at 64
+  one.
 - `preMixStackSizeInBytes` is 16 kB against a default of half a megabyte per
   channel. The graph is one sound into the endpoint, so an eight-channel object
   would otherwise cost four megabytes before a file was open.
-
-`speed` is the sound's pitch, which resamples.
 
 ### Seconds inside, frames at the edges
 
@@ -242,16 +217,12 @@ shows up on files that need resampling. Seconds are the same number on both
 sides. They are converted to frames in two places: seeking, which is what
 miniaudio's API takes, and the file's length when it is read at open.
 
-A double holds a second to about 1e-16, which is a five ten-thousandth of a
-frame after a day of audio.
-
 ### Position
 
 The core counts what it has handed back rather than asking the sound.
-`ma_sound_get_cursor_in_pcm_frames` is the read head: the pitch resampler takes
-in what it needs to fill a block, so the cursor runs ahead of what has been
-heard, further at low speeds. Advancing by the frames returned times the speed
-gives the position of the audio just delivered, and wraps with the file.
+`ma_data_source_get_cursor_in_pcm_frames` is the read head, and the pitch
+resampler pulls in whatever it needs to fill a block, so that cursor runs ahead
+of what has been heard, further at low speeds.
 
 ### Looping, and where a file ends
 
@@ -272,22 +243,9 @@ from miniaudio. That costs the seamless loop point and nothing else.
 ### Seeks
 
 `ma_sound_seek_to_pcm_frame` records a target; the seek happens inside the next
-block the engine processes, which is also when the buffered pages are dropped.
-That block holds the gap rather than audio, and is reported as no frames rather
-than silence, so the position does not advance over frames nobody heard. The
-blocks after it come back empty until the new position has been read from disk:
-one to three of them.
-
-### Reports
-
-`eof` and `underflow` are edges the perform routine raises in one word and the
-Pd clock callback takes, which is why the perform routine sets a clock at all:
-`outlet_` calls are not safe from it.
-
-An empty buffer means one of two opposite things. Until the stream has read
-enough ahead to say it is running, after a fresh `open` or a seek into a region
-not yet on disk, it is filling up, which is not a dropout and is not reported.
-After that it is the buffer running dry, reported once per stall.
+block the engine processes, which is also when the buffered pages are dropped,
+so one to three blocks come back as no frames rather than as silence while the
+new position is read from disk.
 
 ## Licence
 
