@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 """Generate the test fixtures.
 
-Generated rather than committed, so what the tests assert about a file can be
-read here. A signal known frame by frame is what lets a test check where a
-seek landed, by looking at the phase.
-
-soundfile writes the well-formed files. The three that libsndfile will not
-write -- a chunk after the audio, a file cut short of what its header claims,
-and something that is not audio at all -- are assembled here from bytes.
-
 Part of pd-audiofile
 
 SPDX-FileCopyrightText: 2026 Jamie Bullock
