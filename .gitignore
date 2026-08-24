@@ -1,0 +1,14 @@
+# build output
+build/
+build-*/
+fixtures/
+*.pd_darwin
+*.pd_linux
+*.dll
+*.o
+*.a
+*.d
+
+# a local miniaudio checkout, if you point MINIAUDIO_INCLUDE_DIR at one here
+# (the default is a pinned fetch into the build directory)
+/miniaudio/
