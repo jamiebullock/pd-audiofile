@@ -40,9 +40,10 @@ UNEXPECTED = [
 
 
 def find_pd(explicit):
-    """Return the path to pd, and whether it was named rather than found.
-    A pd that was named and is not there is an error rather than a reason to
-    skip: someone meant that one."""
+    """Return the path to pd, and True if it was asked for by argument or by
+    the PD environment variable rather than found by searching. A pd that was
+    asked for and is not there is an error; finding none is a reason to skip.
+    """
     if explicit:
         return explicit, True
     if os.environ.get("PD"):
