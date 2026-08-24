@@ -16,15 +16,15 @@ import numpy
 import soundfile
 
 RATE = 44100
-FREQ = 441.0          # a cycle is exactly 100 frames
+FREQ = 441.0
 FRAMES = 22050
 AMP = 0.5
 
 
 def sine(frames, rate=RATE, channels=1, freq=FREQ, amp=AMP):
-    """Return `frames` samples of a sine, shaped (frames,) for one channel
-    and (frames, channels) for more. The second channel, if present, is
-    inverted, so that a test can tell the two apart.
+    """Return `frames` samples of a sine, stored (frames,) for one channel
+    and (frames, channels) for multiple channels. 
+    The second channel, if present, is inverted.
     """
     v = amp * numpy.sin(2.0 * numpy.pi * freq * numpy.arange(frames) / rate)
     if channels == 1:
@@ -63,8 +63,8 @@ def trailing_chunk(path, samples):
 
 
 def truncated(path, samples, keep=0.4):
-    """Write a WAV holding `keep` of its audio, under a header that still
-    declares all of it."""
+    """Write a WAV holding `keep` of its audio, with a header that
+    declares the full length."""
     soundfile.write(path, samples, RATE, subtype="PCM_16")
     with open(path, "rb") as f:
         blob = f.read()

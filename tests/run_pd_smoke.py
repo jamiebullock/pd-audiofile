@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Load the library into a headless Pd and check the objects work there.
-
-This checks what the C tests cannot: that the binary loads as `-lib audiofile`,
-that the classes create, and that they answer. It is Python rather than a shell
-script so that it runs on Windows, where loading is most likely to break.
+"""Load the library into a headless Pd and check the objects work.
 
 Exits 77 when the fixtures or Pd are missing, which CMake reads as a skip.
 
@@ -44,7 +40,7 @@ UNEXPECTED = [
 
 
 def find_pd(explicit):
-    """Return the path to a pd, and whether it was named rather than found.
+    """Return the path to pd, and whether it was named rather than found.
     A pd that was named and is not there is an error rather than a reason to
     skip: someone meant that one."""
     if explicit:
@@ -99,8 +95,6 @@ def main(argv):
     command = [
         pd_bin,
         "-nogui",
-        # -noaudio still runs the scheduler and the DSP chain, off the
-        # system clock.
         "-noaudio",
         "-stderr",
         "-path", extdir,
@@ -109,8 +103,6 @@ def main(argv):
         os.path.join(HERE, "smoke.pd"),
     ]
 
-    # From a directory of its own, so that -lib loads what -path points at
-    # rather than something in the working directory.
     with tempfile.TemporaryDirectory() as cwd:
         try:
             done = subprocess.run(command, cwd=cwd, timeout=60,
@@ -128,8 +120,6 @@ def main(argv):
 
     print(log)
 
-    # The patch quits Pd itself, so a non-zero status means something else
-    # ended it.
     if done.returncode != 0:
         print("Pd exited with status %d" % done.returncode, file=sys.stderr)
         return 1
