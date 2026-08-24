@@ -42,8 +42,6 @@ option(AUDIOFILE_BUILD_TESTS "Build the core test binary" ON)
 
 if(PD_INCLUDE_DIR STREQUAL "")
     message(STATUS "PD_INCLUDE_DIR not set: fetching Pure Data ${PD_GIT_TAG}")
-    # SOURCE_SUBDIR names a directory that does not exist, which is how you
-    # fetch a repository without also building whatever its CMakeLists does.
     FetchContent_Declare(puredata
         GIT_REPOSITORY https://github.com/pure-data/pure-data.git
         GIT_TAG        ${PD_GIT_TAG}
@@ -114,7 +112,6 @@ if(AUDIOFILE_USE_HOST_MINIAUDIO)
 endif()
 
 if(NOT WIN32)
-    # miniaudio reads ahead on a thread of its own; nothing here starts one.
     find_package(Threads REQUIRED)
     target_link_libraries(audiofile_core PUBLIC Threads::Threads)
 endif()
@@ -122,8 +119,6 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(audiofile_core PUBLIC m dl)
 endif()
 
-# miniaudio and stb_vorbis are other people's code; only ours is held to the
-# warning level.
 if(MSVC)
     target_compile_options(audiofile_core PRIVATE /W3)
 else()
@@ -163,18 +158,14 @@ set_target_properties(audiofile PROPERTIES
 if(MSVC)
     target_compile_options(audiofile PRIVATE /W3)
 else()
-    # Pd's t_newmethod is void *(*)(void) and every constructor is cast to it.
     target_compile_options(audiofile PRIVATE -Wall -Wextra -Wno-cast-function-type)
 endif()
 
 if(APPLE)
-    # Pd's symbols are resolved by the host at load time.
     target_link_options(audiofile PRIVATE
         "LINKER:-undefined" "LINKER:dynamic_lookup")
 elseif(WIN32)
     if(PD_LIBRARY STREQUAL "")
-        # A DLL cannot leave Pd's symbols undefined, so an import library is
-        # not optional here the way it is elsewhere.
         find_library(PD_LIBRARY_FOUND NAMES pd
             HINTS "${PD_INCLUDE_DIR}/../bin" "${PD_INCLUDE_DIR}/../lib"
             NO_DEFAULT_PATH)
@@ -246,15 +237,10 @@ if(AUDIOFILE_BUILD_TESTS)
         message(WARNING "Python 3 not found: fixtures will not be generated")
     endif()
 
-    # 77 is a skip: the fixtures need Python 3, which the build does not
-    # require.
     add_test(NAME core COMMAND test_core "${AUDIOFILE_FIXTURE_DIR}")
     set_tests_properties(core PROPERTIES SKIP_RETURN_CODE 77)
 
-    # The script exits 77, a skip, when it cannot find a Pd to run.
     if(Python3_Interpreter_FOUND)
-        # Pd's binary distribution puts pd next to the import library, which is
-        # the only copy a Windows build is guaranteed to have.
         if(PD_EXECUTABLE STREQUAL "" AND NOT PD_LIBRARY STREQUAL "")
             get_filename_component(pd_bindir "${PD_LIBRARY}" DIRECTORY)
             find_program(PD_EXECUTABLE_FOUND NAMES pd
@@ -278,10 +264,9 @@ if(AUDIOFILE_BUILD_TESTS)
 endif()
 
 # ---------------------------------------------------------------------------
-# Install: the layout Pd expects, a directory named after the library
+# Install
 # ---------------------------------------------------------------------------
 
 install(TARGETS audiofile DESTINATION audiofile)
 install(DIRECTORY help/ DESTINATION audiofile FILES_MATCHING PATTERN "*.pd")
-# audiofile-meta.pd is what deken reads for the version and description.
 install(FILES audiofile-meta.pd README.md LICENSE DESTINATION audiofile)
