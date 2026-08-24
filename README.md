@@ -54,9 +54,9 @@ No creation arguments. One message outlet.
 [af.play~ <channels>]
 ```
 
-The creation argument is the number of signal outlets, 2 by default. Outlets:
-one signal per channel, then a message outlet. A file with a different channel
-count is mixed to the object's.
+Default: 2 channels
+Outlets: one signal per channel, then a message outlet. A file with a different channel
+count is mixed.
 
 | Message in | Argument | Meaning |
 | --- | --- | --- |
@@ -82,17 +82,14 @@ count is mixed to the object's.
 Rules:
 
 - `open` replaces the file being played and stops playback. A failed `open`
-  leaves the file that was open alone.
-- A seek past the end clamps there, and with looping off reads as end of file.
-- A file at another sample rate is resampled to Pd's, and `speed` multiplies
+  leaves the file that was open in place.
+- A seek past the end clamps. With looping off reads as end of file.
+- A file at another sample rate is resampled to Pd's rate, and `speed` multiplies
   that ratio. At speed 2 a file plays twice as fast and an octave higher.
 - Negative speed and reverse playback are not supported.
-- A seek takes a block or two: nothing comes out in between rather than
-  anything stale, and `getpos` answers the target from the moment it is asked.
-- Running dry outputs silence and reports `error underflow` once per stall
-  rather than once per block. Filling up is not running dry: a fresh `open`, or
-  a seek into a region not yet buffered, reports nothing, so `open ..., play 1`
-  in one message is fine.
+- Silence is output for 1-2 blocks whilst seek buffers
+- Buffer underflow outputs silence and reports `error underflow` once per stall
+  rather than once per block. 
 
 ## Building
 
@@ -162,7 +159,7 @@ cmake -S . -B build -DAUDIOFILE_USE_HOST_MINIAUDIO=ON \
 
 ## Testing
 
-`tests/test_core.c` runs the core under greatest, with no Pd involved.
+`tests/test_core.c` runs the core under greatest.
 `tests/run_pd_smoke.py` loads the library into a headless Pd and checks the
 objects create, answer and report `eof`; point it at a Pd with
 `-DPD_EXECUTABLE=` or the `PD` environment variable.
@@ -186,66 +183,6 @@ src/af_pdpath.h            path resolution against the patch and search path
 src/af_miniaudio.h         the one place miniaudio.h is included
 src/miniaudio_impl.c       compiles miniaudio's implementation
 ```
-
-`audiofile_core` includes no `m_pd.h`, so the tests build and run without Pd.
-miniaudio's resource manager reads ahead from disk on a thread of its own, and
-the DSP callback pulls finished frames: it never opens files, allocates, locks
-or blocks. One thread owns a stream -- Pd's scheduler runs messages and the
-perform routine, and a libpd host serialises its calls as libpd requires.
-
-## Technical notes
-
-### Playback
-
-Two engine settings are chosen rather than defaulted:
-
-- `periodSizeInFrames` is 64, Pd's default block size, which the core cannot
-  read from Pd. It also sizes the node graph's caches, which a seek plays
-  through: at the 480-frame default a seek is heard seven blocks late, at 64
-  one.
-- `preMixStackSizeInBytes` is 16 kB against a default of half a megabyte per
-  channel. The graph is one sound into the endpoint, so an eight-channel object
-  would otherwise cost four megabytes before a file was open.
-
-### Seconds inside, frames at the edges
-
-Position and duration are held in seconds. Frames are ambiguous here: a
-`ma_sound` counts in frames of the engine's rate whatever the file's own rate
-is, so a 48 kHz file in a 44.1 kHz Pd is 20258 frames long inside and 22050
-frames long to a patch, and code that mixes the two is wrong in a way that only
-shows up on files that need resampling. Seconds are the same number on both
-sides. They are converted to frames in two places: seeking, which is what
-miniaudio's API takes, and the file's length when it is read at open.
-
-### Position
-
-The core counts what it has handed back rather than asking the sound.
-`ma_data_source_get_cursor_in_pcm_frames` is the read head, and the pitch
-resampler pulls in whatever it needs to fill a block, so that cursor runs ahead
-of what has been heard, further at low speeds.
-
-### Looping, and where a file ends
-
-Sounds are opened with looping already on. The stream fills its pages in
-advance, and a page filled while looping was off stops at the end of the file:
-switching looping on afterwards leaves a gap of about a block at the first loop
-point.
-
-A file played once is therefore stopped here rather than by miniaudio. Each
-block is bounded by what is left between the position and the file's length, so
-the last block is short by the right amount, `eof` is reported once, and the
-play head is left on the end.
-
-A container that records no length cannot be counted down, so such a file is
-opened the other way round: looping follows the `loop` message and the end comes
-from miniaudio. That costs the seamless loop point and nothing else.
-
-### Seeks
-
-`ma_sound_seek_to_pcm_frame` records a target; the seek happens inside the next
-block the engine processes, which is also when the buffered pages are dropped,
-so one to three blocks come back as no frames rather than as silence while the
-new position is read from disk.
 
 ## Licence
 
