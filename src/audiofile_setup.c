@@ -9,7 +9,7 @@
 #include "m_pd.h"
 
 #ifndef AUDIOFILE_VERSION
-#define AUDIOFILE_VERSION "0.1.0"
+#error "define AUDIOFILE_VERSION: CMake passes the project version, other builds must too"
 #endif
 
 #if defined(_WIN32)

@@ -276,6 +276,10 @@ endif()
 # Install
 # ---------------------------------------------------------------------------
 
+configure_file(audiofile-meta.pd.in
+               "${CMAKE_CURRENT_BINARY_DIR}/audiofile-meta.pd" @ONLY)
+
 install(TARGETS audiofile DESTINATION audiofile)
 install(DIRECTORY help/ DESTINATION audiofile FILES_MATCHING PATTERN "*.pd")
-install(FILES audiofile-meta.pd README.md LICENSE DESTINATION audiofile)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/audiofile-meta.pd"
+              README.md LICENSE DESTINATION audiofile)
