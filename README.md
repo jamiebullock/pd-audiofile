@@ -172,11 +172,16 @@ frame count, the phase of the block after a seek, output length against speed
 and sample-rate conversion, a forced stall reported once, and the error paths
 for a missing, malformed or truncated file.
 
-Fixtures are generated rather than committed, by `tests/make_fixtures.py`: a
-441 Hz sine at 44100 Hz, 100 frames per cycle, as WAV PCM-16, WAV float-32, 16-
-and 24-bit AIFF, a truncated WAV, a WAV with a chunk after the audio, and FLAC,
-MP3 and Vorbis where `ffmpeg` is on the path. A signal known frame by frame
-lets a test say which frame a seek reached.
+Fixtures are generated rather than committed, by `tests/make_fixtures.py`: one
+sine, 100 frames per cycle, as WAV PCM-16, WAV float-32, 16- and 24-bit AIFF,
+FLAC, MP3 and Vorbis, plus a truncated WAV and a WAV with a chunk after the
+audio. A signal known frame by frame lets a test say which frame a seek
+reached.
+
+The script needs `soundfile`, which is `pip install soundfile`. Without it the
+fixtures are not generated and both tests skip; a Python that refuses to
+install into itself, as Homebrew's does, wants a virtual environment and
+`-DPython3_EXECUTABLE=` pointing at it.
 
 `tests/run_pd_smoke.py` loads the library into a headless Pd and checks that the
 objects create, answer `info`, play and report `eof`. Its patch sends

@@ -195,6 +195,12 @@ if(AUDIOFILE_BUILD_TESTS)
 
     find_package(Python3 COMPONENTS Interpreter)
 
+    if(Python3_Interpreter_FOUND)
+        execute_process(COMMAND ${Python3_EXECUTABLE} -c "import soundfile"
+                        RESULT_VARIABLE AUDIOFILE_SOUNDFILE
+                        OUTPUT_QUIET ERROR_QUIET)
+    endif()
+
     if(GREATEST_INCLUDE_DIR STREQUAL "")
         message(STATUS "GREATEST_INCLUDE_DIR not set: fetching greatest ${GREATEST_GIT_TAG}")
         FetchContent_Declare(greatest
@@ -222,7 +228,7 @@ if(AUDIOFILE_BUILD_TESTS)
         target_link_libraries(test_core PRIVATE m)
     endif()
 
-    if(Python3_Interpreter_FOUND)
+    if(AUDIOFILE_SOUNDFILE EQUAL 0)
         add_custom_command(
             OUTPUT "${AUDIOFILE_FIXTURE_DIR}/sine_mono_44100_s16.wav"
             COMMAND ${Python3_EXECUTABLE}
@@ -233,6 +239,9 @@ if(AUDIOFILE_BUILD_TESTS)
         add_custom_target(fixtures ALL
             DEPENDS "${AUDIOFILE_FIXTURE_DIR}/sine_mono_44100_s16.wav")
         add_dependencies(test_core fixtures)
+    elseif(Python3_Interpreter_FOUND)
+        message(WARNING "python soundfile not found (pip install soundfile): "
+                        "fixtures will not be generated")
     else()
         message(WARNING "Python 3 not found: fixtures will not be generated")
     endif()

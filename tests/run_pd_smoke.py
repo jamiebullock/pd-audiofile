@@ -80,6 +80,10 @@ def main(argv):
 
     extdir = os.path.abspath(argv[1])
     fixdir = os.path.abspath(argv[2])
+    if not os.path.isfile(os.path.join(fixdir, "sine_mono_44100_s16.wav")):
+        print("no fixtures in %s: skipping" % fixdir, file=sys.stderr)
+        return 77
+
     pd_bin, was_asked_for = find_pd(argv[3] if len(argv) > 3 else None)
 
     if not pd_bin or not os.path.isfile(pd_bin):

@@ -29,23 +29,24 @@ jobs:
         with:
           persist-credentials: false
 
-      # ffmpeg widens the fixture set to FLAC, MP3 and Vorbis. Without it the
-      # tests skip those rather than fail.
-      - name: Install ffmpeg and Pd (Linux)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # soundfile writes the fixtures. Without it the tests skip rather than
+      # fail.
+      - name: Install soundfile
+        run: python -m pip install --upgrade soundfile
+
+      - name: Install Pd (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg puredata-core
+          sudo apt-get install -y puredata-core
 
-      - name: Install ffmpeg and Pd (macOS)
+      - name: Install Pd (macOS)
         if: runner.os == 'macOS'
-        run: |
-          brew install ffmpeg || true
-          brew install --cask pd || true
-
-      - name: Install ffmpeg (Windows)
-        if: runner.os == 'Windows'
-        run: choco install -y ffmpeg
+        run: brew install --cask pd || true
 
       # Pd's headers alone are not enough on Windows: a DLL cannot leave Pd's
       # symbols undefined, so the binary distribution is fetched for pd.lib.
