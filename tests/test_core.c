@@ -29,6 +29,7 @@
 
 #define FIXTURE_RATE    44100.0
 #define FIXTURE_FRAMES  22050
+#define FIXTURE_SECONDS (FIXTURE_FRAMES / FIXTURE_RATE)
 #define FIXTURE_PERIOD  100.0
 #define FIXTURE_AMP     0.5
 
@@ -194,7 +195,7 @@ static double phase_error(const float *buf, size_t frames, double start_frame,
 /* Probing                                                            */
 /* ------------------------------------------------------------------ */
 
-TEST probe_reports_the_header(const char *name, double rate, uint64_t frames,
+TEST probe_reports_the_header(const char *name, double rate, double duration,
                               uint32_t channels, const char *format)
 {
     af_info   info;
@@ -211,11 +212,9 @@ TEST probe_reports_the_header(const char *name, double rate, uint64_t frames,
             info.channels == channels);
 
     /* Lossy encoders pad, so those fixtures are checked without a length. */
-    if (frames > 0) {
-        ASSERTm(msg("frames %llu, wanted %llu",
-                    (unsigned long long)info.frames,
-                    (unsigned long long)frames),
-                info.frames == frames);
+    if (duration > 0.0) {
+        ASSERTm(msg("duration %g, wanted %g", info.duration, duration),
+                fabs(info.duration - duration) < 1e-9);
     }
     if (format != NULL) {
         ASSERTm(msg("format %s, wanted %s", info.format, format),
@@ -257,25 +256,25 @@ TEST probe_with_no_path(void)
 
 SUITE(probing)
 {
-    struct { const char *name; double rate; uint64_t frames;
+    struct { const char *name; double rate; double duration;
              uint32_t channels; const char *format; } cases[] = {
-        { "sine_mono_44100_s16.wav",   44100.0, FIXTURE_FRAMES, 1, "s16" },
-        { "sine_mono_44100_f32.wav",   44100.0, FIXTURE_FRAMES, 1, "f32" },
-        { "sine_stereo_44100_s16.wav", 44100.0, FIXTURE_FRAMES, 2, "s16" },
-        { "sine_mono_48000_s16.wav",   48000.0, FIXTURE_FRAMES, 1, "s16" },
-        { "sine_mono_44100_s16.aiff",  44100.0, FIXTURE_FRAMES, 1, "s16" },
-        { "sine_mono_44100_s24.aiff",  44100.0, FIXTURE_FRAMES, 1, "s24" },
-        { "trailing_chunk.wav",        44100.0, FIXTURE_FRAMES, 1, "s16" },
-        { "sine_mono_44100.flac",      44100.0, FIXTURE_FRAMES, 1, NULL  },
-        { "sine_mono_44100.mp3",       44100.0, 0,              1, NULL  },
-        { "sine_mono_44100.ogg",       44100.0, 0,              1, NULL  }
+        { "sine_mono_44100_s16.wav",   44100.0, FIXTURE_SECONDS, 1, "s16" },
+        { "sine_mono_44100_f32.wav",   44100.0, FIXTURE_SECONDS, 1, "f32" },
+        { "sine_stereo_44100_s16.wav", 44100.0, FIXTURE_SECONDS, 2, "s16" },
+        { "sine_mono_48000_s16.wav",   48000.0, FIXTURE_FRAMES / 48000.0, 1, "s16" },
+        { "sine_mono_44100_s16.aiff",  44100.0, FIXTURE_SECONDS, 1, "s16" },
+        { "sine_mono_44100_s24.aiff",  44100.0, FIXTURE_SECONDS, 1, "s24" },
+        { "trailing_chunk.wav",        44100.0, FIXTURE_SECONDS, 1, "s16" },
+        { "sine_mono_44100.flac",      44100.0, FIXTURE_SECONDS, 1, NULL  },
+        { "sine_mono_44100.mp3",       44100.0, 0.0,            1, NULL  },
+        { "sine_mono_44100.ogg",       44100.0, 0.0,            1, NULL  }
     };
     size_t i;
 
     for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         greatest_set_test_suffix(cases[i].name);
         RUN_TESTp(probe_reports_the_header, cases[i].name, cases[i].rate,
-                  cases[i].frames, cases[i].channels, cases[i].format);
+                  cases[i].duration, cases[i].channels, cases[i].format);
     }
 
     RUN_TEST(probe_on_a_file_that_is_not_there);
@@ -401,10 +400,9 @@ TEST info_describes_the_file_not_the_playback(void)
     ASSERTm(msg("samplerate: the stream says %g, the file says %g",
                 stream_info.samplerate, probe_info.samplerate),
             stream_info.samplerate == probe_info.samplerate);
-    ASSERTm(msg("frames: the stream says %llu, the file says %llu",
-                (unsigned long long)stream_info.frames,
-                (unsigned long long)probe_info.frames),
-            stream_info.frames == probe_info.frames);
+    ASSERTm(msg("duration: the stream says %g, the file says %g",
+                stream_info.duration, probe_info.duration),
+            stream_info.duration == probe_info.duration);
     ASSERTm(msg("format: the stream says %s, the file says %s",
                 stream_info.format, probe_info.format),
             strcmp(stream_info.format, probe_info.format) == 0);

@@ -38,7 +38,7 @@ const char *af_status_string(af_status status);
 
 typedef struct {
     double      samplerate;
-    uint64_t    frames;     /* 0 when the container does not record a length */
+    double      duration;   /* seconds; 0 when the container records no length */
     uint32_t    channels;
     const char *format;     /* "u8", "s16", "s24", "s32", "f32" or "unknown" */
 } af_info;

@@ -23,8 +23,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # What tests/smoke.pd should print.
 EXPECTED = [
-    "INFO: info 44100 22050 1 s16",
-    "PLAY: info 44100 22050 1 s16",
+    "INFO: info 44100 0.5 1 s16",
+    "PLAY: info 44100 0.5 1 s16",
     "PLAY: pos",
     "PLAY: eof",
 ]

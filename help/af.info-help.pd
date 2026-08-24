@@ -11,7 +11,7 @@
 #X floatatom 224 347 5 0 0 0 - - - 0;
 #X symbolatom 284 347 8 0 0 0 - - - 0;
 #X text 24 371 rate;
-#X text 114 371 frames;
+#X text 114 371 duration;
 #X text 224 371 chans;
 #X text 284 371 format;
 #X obj 78 275 print error;

@@ -46,7 +46,7 @@ static void af_info_open(t_af_info *x, t_symbol *name)
     }
 
     SETFLOAT (&out[0], (t_float)info.samplerate);
-    SETFLOAT (&out[1], (t_float)info.frames);
+    SETFLOAT (&out[1], (t_float)info.duration);
     SETFLOAT (&out[2], (t_float)info.channels);
     SETSYMBOL(&out[3], gensym(info.format));
 

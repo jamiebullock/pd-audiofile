@@ -23,7 +23,7 @@
 
 #define AF_FALLBACK_SAMPLERATE 44100.0
 
-static const af_info af_info_none = { 0.0, 0, 0, "unknown" };
+static const af_info af_info_none = { 0.0, 0.0, 0, "unknown" };
 
 struct af_stream {
     uint32_t channels;
@@ -128,7 +128,7 @@ static af_status af_read_info(ma_decoder *decoder, af_info *out)
     }
 
     out->samplerate = (double)samplerate;
-    out->frames     = (uint64_t)frames;
+    out->duration   = (double)frames / (double)samplerate;
     out->channels   = (uint32_t)channels;
     out->format     = af_format_name(format);
     return AF_OK;
