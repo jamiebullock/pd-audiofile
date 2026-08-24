@@ -12,6 +12,8 @@
 
 #include "audiofile_core.h"
 
+#include "greatest.h"
+
 #if defined(_WIN32)
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
@@ -51,8 +53,6 @@ static void af_sleep_ms(int ms)
 #endif
 
 static const char *g_dir = "fixtures";
-static int g_pass, g_fail, g_skip;
-static const char *g_case = "";
 
 static char *fixture(const char *name)
 {
@@ -69,31 +69,18 @@ static int exists(const char *path)
     return 1;
 }
 
-static void ok(int condition, const char *fmt, ...)
+/* greatest holds the message pointer and prints it once the test has
+ * returned, so one that carries values cannot be built on the stack. */
+static const char *msg(const char *fmt, ...)
 {
+    static char text[512];
     va_list ap;
+
     va_start(ap, fmt);
-    if (condition) {
-        g_pass++;
-    } else {
-        g_fail++;
-        printf("  FAIL  [%s] ", g_case);
-        vprintf(fmt, ap);
-        printf("\n");
-    }
+    vsnprintf(text, sizeof(text), fmt, ap);
     va_end(ap);
-}
 
-static void skip(const char *what)
-{
-    g_skip++;
-    printf("  skip  %s\n", what);
-}
-
-static void begin(const char *name)
-{
-    g_case = name;
-    printf("- %s\n", name);
+    return text;
 }
 
 /* ------------------------------------------------------------------ */
@@ -124,9 +111,7 @@ static af_drain drain(af_stream *s, float *out, size_t limit,
         if (want > block) want = block;
         got = af_stream_read(s, out ? out + d.frames * channels : NULL, want);
 
-        {
-            if (af_stream_read_events(s) & AF_EVENT_EOF) d.eofs++;
-        }
+        if (af_stream_read_events(s) & AF_EVENT_EOF) d.eofs++;
 
         if (got == 0) {
             if (d.eofs > 0) break;
@@ -209,110 +194,122 @@ static double phase_error(const float *buf, size_t frames, double start_frame,
  * the file's. */
 #define AF_PRIME 8
 
+/* Opens the fixture on a stream of `channels` outputs at `rate`, and fails
+ * the calling test if either step does not work. */
+#define OPEN_FIXTURE(s, info, name, channels, rate)                          \
+    do {                                                                     \
+        ASSERTm("af_stream_new", af_stream_new(&(s), (channels), (rate)) == AF_OK); \
+        ASSERTm("open", af_stream_open((s), fixture(name), &(info)) == AF_OK); \
+    } while (0)
+
 /* ------------------------------------------------------------------ */
 /* Probing                                                             */
 /* ------------------------------------------------------------------ */
 
-static void probe_case(const char *name, double rate, uint64_t frames,
-                       uint32_t channels, const char *format)
+TEST probe_reports_the_header(const char *name, double rate, uint64_t frames,
+                              uint32_t channels, const char *format)
 {
     af_info   info;
     af_status status;
-    char      label[256];
 
-    if (!exists(fixture(name))) { skip(name); return; }
-
-    snprintf(label, sizeof(label), "af_probe %s", name);
-    begin(label);
+    if (!exists(fixture(name))) SKIPm("fixture not generated");
 
     status = af_probe(fixture(name), &info);
-    ok(status == AF_OK, "status %s", af_status_string(status));
-    if (status != AF_OK) return;
+    ASSERTm(msg("status %s", af_status_string(status)), status == AF_OK);
 
-    ok(info.samplerate == rate, "samplerate %g, wanted %g", info.samplerate, rate);
-    ok(info.channels == channels, "channels %u, wanted %u", info.channels, channels);
+    ASSERTm(msg("samplerate %g, wanted %g", info.samplerate, rate),
+            info.samplerate == rate);
+    ASSERTm(msg("channels %u, wanted %u", info.channels, channels),
+            info.channels == channels);
 
     /* Lossy encoders pad; the container's own idea of the length is exact. */
     if (frames > 0) {
-        ok(info.frames == frames, "frames %llu, wanted %llu",
-           (unsigned long long)info.frames, (unsigned long long)frames);
+        ASSERTm(msg("frames %llu, wanted %llu",
+                    (unsigned long long)info.frames,
+                    (unsigned long long)frames),
+                info.frames == frames);
     }
     if (format != NULL) {
-        ok(strcmp(info.format, format) == 0, "format %s, wanted %s",
-           info.format, format);
+        ASSERTm(msg("format %s, wanted %s", info.format, format),
+                strcmp(info.format, format) == 0);
     }
+    PASS();
 }
 
-static void test_probe_errors(void)
+TEST probe_on_a_file_that_is_not_there(void)
 {
     af_info   info;
-    af_status status;
+    af_status status = af_probe(fixture("no_such_file.wav"), &info);
 
-    begin("af_probe on a file that is not there");
-    status = af_probe(fixture("no_such_file.wav"), &info);
-    ok(status == AF_ERR_OPEN, "status %s, wanted nofile", af_status_string(status));
-
-    begin("af_probe on a malformed file");
-    status = af_probe(fixture("garbage.wav"), &info);
-    ok(status != AF_OK, "a text file was accepted as audio");
-    ok(status == AF_ERR_FORMAT, "status %s, wanted format", af_status_string(status));
-
-    begin("af_probe with no path");
-    status = af_probe(NULL, &info);
-    ok(status == AF_ERR_ARGS, "status %s, wanted badargs", af_status_string(status));
+    ASSERTm(msg("status %s, wanted nofile", af_status_string(status)),
+            status == AF_ERR_OPEN);
+    PASS();
 }
 
-static void test_truncated(void)
+TEST probe_on_a_malformed_file(void)
 {
-    af_info    info;
-    af_status  status;
-    af_stream *s;
-    float     *buf;
-    af_drain   d;
+    af_info   info;
+    af_status status = af_probe(fixture("garbage.wav"), &info);
 
-    begin("a truncated file reads short rather than crashing");
+    ASSERTm("a text file was accepted as audio", status != AF_OK);
+    ASSERTm(msg("status %s, wanted format", af_status_string(status)),
+            status == AF_ERR_FORMAT);
+    PASS();
+}
 
-    status = af_probe(fixture("truncated.wav"), &info);
-    ok(status == AF_OK, "status %s: the header describes the file it meant "
-                        "to be", af_status_string(status));
-    if (status != AF_OK) return;
+TEST probe_with_no_path(void)
+{
+    af_info   info;
+    af_status status = af_probe(NULL, &info);
 
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("truncated.wav"), &info) == AF_OK, "open");
+    ASSERTm(msg("status %s, wanted badargs", af_status_string(status)),
+            status == AF_ERR_ARGS);
+    PASS();
+}
 
-    buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
-    af_stream_set_playing(s, 1);
-    d = drain(s, buf, FIXTURE_FRAMES * 2, 256, 1, 3000);
+SUITE(probing)
+{
+    struct { const char *name; double rate; uint64_t frames;
+             uint32_t channels; const char *format; } cases[] = {
+        { "sine_mono_44100_s16.wav",   44100.0, FIXTURE_FRAMES, 1, "s16" },
+        { "sine_mono_44100_f32.wav",   44100.0, FIXTURE_FRAMES, 1, "f32" },
+        { "sine_stereo_44100_s16.wav", 44100.0, FIXTURE_FRAMES, 2, "s16" },
+        { "sine_mono_48000_s16.wav",   48000.0, FIXTURE_FRAMES, 1, "s16" },
+        { "sine_mono_44100_s16.aiff",  44100.0, FIXTURE_FRAMES, 1, "s16" },
+        { "sine_mono_44100_s24.aiff",  44100.0, FIXTURE_FRAMES, 1, "s24" },
+        { "trailing_chunk.wav",        44100.0, FIXTURE_FRAMES, 1, "s16" },
+        { "sine_mono_44100.flac",      44100.0, FIXTURE_FRAMES, 1, NULL  },
+        { "sine_mono_44100.mp3",       44100.0, 0,              1, NULL  },
+        { "sine_mono_44100.ogg",       44100.0, 0,              1, NULL  }
+    };
+    size_t i;
 
-    ok(!d.timed_out, "timed out draining a truncated file");
-    ok(d.frames < (size_t)FIXTURE_FRAMES,
-       "read %lu frames from a file cut short of %d",
-       (unsigned long)d.frames, FIXTURE_FRAMES);
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        greatest_set_test_suffix(cases[i].name);
+        RUN_TESTp(probe_reports_the_header, cases[i].name, cases[i].rate,
+                  cases[i].frames, cases[i].channels, cases[i].format);
+    }
 
-    free(buf);
-    af_stream_free(s);
+    RUN_TEST(probe_on_a_file_that_is_not_there);
+    RUN_TEST(probe_on_a_malformed_file);
+    RUN_TEST(probe_with_no_path);
 }
 
 /* ------------------------------------------------------------------ */
 /* Streaming                                                           */
 /* ------------------------------------------------------------------ */
 
-static void test_read_whole_file(const char *name, uint32_t channels)
+TEST reads_end_to_end(const char *name, uint32_t channels)
 {
     af_stream *s;
     af_info    info;
     float     *buf;
     af_drain   d;
-    char       label[256];
     size_t     limit;
 
-    if (!exists(fixture(name))) { skip(name); return; }
+    if (!exists(fixture(name))) SKIPm("fixture not generated");
 
-    snprintf(label, sizeof(label), "reading %s end to end", name);
-    begin(label);
-
-    ok(af_stream_new(&s, channels, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture(name), &info) == AF_OK, "open");
+    OPEN_FIXTURE(s, info, name, channels, FIXTURE_RATE);
 
     limit = (size_t)FIXTURE_FRAMES * 2;
     buf = scratch_buffer(limit, channels);
@@ -320,25 +317,149 @@ static void test_read_whole_file(const char *name, uint32_t channels)
     af_stream_set_playing(s, 1);
     d = drain(s, buf, limit, 64, channels, 5000);
 
-    ok(!d.timed_out, "timed out");
-    ok(d.eofs == 1, "eof reported %d times, wanted once", d.eofs);
+    ASSERTm("timed out", !d.timed_out);
+    ASSERTm(msg("eof reported %d times, wanted once", d.eofs), d.eofs == 1);
 
     /* One frame of resampler history, and MP3 adds encoder padding. */
-    ok(labs((long)d.frames - (long)FIXTURE_FRAMES) <= 8,
-       "produced %lu frames, wanted %d",
-       (unsigned long)d.frames, FIXTURE_FRAMES);
+    ASSERTm(msg("produced %lu frames, wanted %d",
+                (unsigned long)d.frames, FIXTURE_FRAMES),
+            labs((long)d.frames - (long)FIXTURE_FRAMES) <= 8);
 
     if (channels == 1) {
         int lag = 0;
         double err = phase_error(buf + AF_PRIME, 512, (double)AF_PRIME, 1.0, &lag);
-        ok(err < 0.02, "waveform is off by %.4f at lag %d", err, lag);
+        ASSERTm(msg("waveform is off by %.4f at lag %d", err, lag), err < 0.02);
     }
 
     free(buf);
     af_stream_free(s);
+    PASS();
 }
 
-static void test_seek(void)
+TEST a_truncated_file_reads_short(void)
+{
+    af_info    info;
+    af_status  status;
+    af_stream *s;
+    float     *buf;
+    af_drain   d;
+
+    status = af_probe(fixture("truncated.wav"), &info);
+    ASSERTm(msg("status %s: the header describes the file it meant to be",
+                af_status_string(status)),
+            status == AF_OK);
+
+    OPEN_FIXTURE(s, info, "truncated.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, FIXTURE_FRAMES * 2, 256, 1, 3000);
+
+    ASSERTm("timed out draining a truncated file", !d.timed_out);
+    ASSERTm(msg("read %lu frames from a file cut short of %d",
+                (unsigned long)d.frames, FIXTURE_FRAMES),
+            d.frames < (size_t)FIXTURE_FRAMES);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+TEST a_stereo_file_keeps_its_channels_apart(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+
+    OPEN_FIXTURE(s, info, "sine_stereo_44100_s16.wav", 2, FIXTURE_RATE);
+    ASSERTm(msg("channels %u", info.channels), info.channels == 2);
+
+    buf = scratch_buffer(4096, 2);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, 1024, 64, 2, 3000);
+    ASSERTm(msg("got %lu frames", (unsigned long)d.frames), d.frames == 1024);
+
+    /* The fixture inverts its second channel. */
+    {
+        double worst = 0.0;
+        size_t i;
+        for (i = 8; i < 1024; i++) {
+            double err = fabs((double)buf[i * 2] + (double)buf[i * 2 + 1]);
+            if (err > worst) worst = err;
+        }
+        ASSERTm(msg("the two channels are not mirrored: off by %.4f", worst),
+                worst < 0.01);
+    }
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+/* The reason this matters: [af.play~] and [af.info] are meant to answer with
+ * the same four elements for the same file. A decoder configured for playback
+ * describes the playback, so the two would drift apart without care. */
+TEST info_describes_the_file_not_the_playback(void)
+{
+    af_stream *s;
+    af_info    stream_info, probe_info;
+
+    /* One channel out, two in, and the file's own rate unlike the output's. */
+    OPEN_FIXTURE(s, stream_info, "sine_stereo_44100_s16.wav", 1, 22050.0);
+    ASSERTm("probe",
+            af_probe(fixture("sine_stereo_44100_s16.wav"), &probe_info) == AF_OK);
+
+    ASSERTm(msg("channels: the stream says %u, the file says %u",
+                stream_info.channels, probe_info.channels),
+            stream_info.channels == probe_info.channels);
+    ASSERTm(msg("samplerate: the stream says %g, the file says %g",
+                stream_info.samplerate, probe_info.samplerate),
+            stream_info.samplerate == probe_info.samplerate);
+    ASSERTm(msg("frames: the stream says %llu, the file says %llu",
+                (unsigned long long)stream_info.frames,
+                (unsigned long long)probe_info.frames),
+            stream_info.frames == probe_info.frames);
+    ASSERTm(msg("format: the stream says %s, the file says %s",
+                stream_info.format, probe_info.format),
+            strcmp(stream_info.format, probe_info.format) == 0);
+
+    /* And `info` on the open file has to say the same thing again. */
+    ASSERTm("info", af_stream_info(s, &stream_info) == AF_OK);
+    ASSERTm(msg("info channels %u", stream_info.channels),
+            stream_info.channels == probe_info.channels);
+
+    af_stream_free(s);
+    PASS();
+}
+
+SUITE(reading)
+{
+    struct { const char *name; uint32_t channels; } cases[] = {
+        { "sine_mono_44100_s16.wav",  1 },
+        { "sine_mono_44100_f32.wav",  1 },
+        { "sine_mono_44100_s16.aiff", 1 },
+        { "sine_mono_44100_s24.aiff", 1 },
+        { "trailing_chunk.wav",       1 },
+        { "sine_mono_44100.flac",     1 }
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        greatest_set_test_suffix(cases[i].name);
+        RUN_TESTp(reads_end_to_end, cases[i].name, cases[i].channels);
+    }
+
+    RUN_TEST(a_truncated_file_reads_short);
+    RUN_TEST(a_stereo_file_keeps_its_channels_apart);
+    RUN_TEST(info_describes_the_file_not_the_playback);
+}
+
+/* ------------------------------------------------------------------ */
+/* Seeking                                                             */
+/* ------------------------------------------------------------------ */
+
+TEST a_seek_lands_where_it_was_asked(void)
 {
     af_stream *s;
     af_info    info;
@@ -348,10 +469,7 @@ static void test_seek(void)
     double     err;
     uint64_t   target = 7000;   /* not a whole number of cycles */
 
-    begin("seeking, and the first block after it");
-
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_f32.wav"), &info) == AF_OK, "open");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
 
     buf = scratch_buffer(4096, 1);
     af_stream_set_playing(s, 1);
@@ -360,183 +478,367 @@ static void test_seek(void)
      * failed to take would be caught handing back frames from around zero. */
     drain(s, buf, 2048, 64, 1, 2000);
 
-    ok(af_stream_seek_seconds(s, (double)target / FIXTURE_RATE) == AF_OK, "seek");
+    ASSERTm("seek",
+            af_stream_seek_seconds(s, (double)target / FIXTURE_RATE) == AF_OK);
 
     d = drain(s, buf, 512, 64, 1, 2000);
-    ok(!d.timed_out, "timed out after seeking");
-    ok(d.frames == 512, "got %lu frames after seeking", (unsigned long)d.frames);
+    ASSERTm("timed out after seeking", !d.timed_out);
+    ASSERTm(msg("got %lu frames after seeking", (unsigned long)d.frames),
+            d.frames == 512);
 
     err = phase_error(buf + AF_PRIME, 512 - AF_PRIME,
                       (double)(target + AF_PRIME), 1.0, &lag);
-    ok(err < 0.02, "the block after the seek is off by %.4f (best lag %d): "
-                   "stale samples, or the wrong position", err, lag);
+    ASSERTm(msg("the block after the seek is off by %.4f (best lag %d): "
+                "stale samples, or the wrong position", err, lag),
+            err < 0.02);
 
-    ok(labs((long)tell_frames(s) - (long)(target + 512)) <= 64,
-       "position reads %llu, wanted about %llu",
-       (unsigned long long)tell_frames(s),
-       (unsigned long long)(target + 512));
-
-    /* Seeking back and forth repeatedly is where a seek that has not settled
-     * before the block it is asked for shows up. */
-    {
-        int i;
-        int bad = 0;
-        for (i = 0; i < 16; i++) {
-            uint64_t where = (uint64_t)(1000 + i * 613);
-            af_stream_seek_seconds(s, (double)where / FIXTURE_RATE);
-            d = drain(s, buf, 256, 64, 1, 2000);
-            if (d.frames != 256) { bad++; continue; }
-            if (phase_error(buf + AF_PRIME, 256 - AF_PRIME,
-                            (double)(where + AF_PRIME), 1.0, NULL) >= 0.02) bad++;
-        }
-        ok(bad == 0, "%d of 16 repeated seeks came back wrong", bad);
-    }
-
-    begin("seeking past the end clamps, and reads as end of file");
-    ok(af_stream_seek_seconds(s, FIXTURE_FRAMES * 4 / FIXTURE_RATE) == AF_OK,
-       "seek past the end");
-    ok(!af_stream_pending(s), "an event was waiting before anything was read");
-    af_stream_read(s, buf, 64);
-    ok(af_stream_pending(s), "nothing was waiting after reading past the end");
-    ok(af_stream_pending(s), "the second look found nothing: it was consumed");
-    d = drain(s, buf, 512, 64, 1, 1000);
-    ok(d.eofs == 1, "eof reported %d times after seeking past the end", d.eofs);
-    ok(d.frames == 0, "%lu frames came back from beyond the end",
-       (unsigned long)d.frames);
-
-    begin("seeking with no file open");
-    af_stream_close(s);
-    ok(af_stream_seek_seconds(s, 0.0) == AF_ERR_NOFILE, "seek without a file");
+    ASSERTm(msg("position reads %llu, wanted about %llu",
+                (unsigned long long)tell_frames(s),
+                (unsigned long long)(target + 512)),
+            labs((long)tell_frames(s) - (long)(target + 512)) <= 64);
 
     free(buf);
     af_stream_free(s);
+    PASS();
 }
 
-static void test_speed(void)
+/* Seeking back and forth repeatedly is where a seek that has not settled
+ * before the block it is asked for shows up. */
+TEST repeated_seeks_land_where_they_were_asked(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+    int        i;
+    int        bad = 0;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer(4096, 1);
+    af_stream_set_playing(s, 1);
+    drain(s, buf, 2048, 64, 1, 2000);
+
+    for (i = 0; i < 16; i++) {
+        uint64_t where = (uint64_t)(1000 + i * 613);
+        af_stream_seek_seconds(s, (double)where / FIXTURE_RATE);
+        d = drain(s, buf, 256, 64, 1, 2000);
+        if (d.frames != 256) { bad++; continue; }
+        if (phase_error(buf + AF_PRIME, 256 - AF_PRIME,
+                        (double)(where + AF_PRIME), 1.0, NULL) >= 0.02) bad++;
+    }
+    ASSERTm(msg("%d of 16 repeated seeks came back wrong", bad), bad == 0);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+TEST a_seek_past_the_end_clamps(void)
 {
     af_stream *s;
     af_info    info;
     float     *buf;
     af_drain   d;
 
-    begin("speed 2 halves the output length");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
 
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
+    buf = scratch_buffer(4096, 1);
+    af_stream_set_playing(s, 1);
+
+    ASSERTm("seek past the end",
+            af_stream_seek_seconds(s, FIXTURE_FRAMES * 4 / FIXTURE_RATE) == AF_OK);
+    ASSERTm("an event was waiting before anything was read",
+            !af_stream_pending(s));
+    af_stream_read(s, buf, 64);
+    ASSERTm("nothing was waiting after reading past the end",
+            af_stream_pending(s));
+    ASSERTm("the second look found nothing: it was consumed",
+            af_stream_pending(s));
+
+    d = drain(s, buf, 512, 64, 1, 1000);
+    ASSERTm(msg("eof reported %d times after seeking past the end", d.eofs),
+            d.eofs == 1);
+    ASSERTm(msg("%lu frames came back from beyond the end",
+                (unsigned long)d.frames),
+            d.frames == 0);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+TEST a_seek_with_no_file_open_is_an_error(void)
+{
+    af_stream *s;
+    af_info    info;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
+    af_stream_close(s);
+    ASSERTm("seek without a file",
+            af_stream_seek_seconds(s, 0.0) == AF_ERR_NOFILE);
+
+    af_stream_free(s);
+    PASS();
+}
+
+SUITE(seeking)
+{
+    RUN_TEST(a_seek_lands_where_it_was_asked);
+    RUN_TEST(repeated_seeks_land_where_they_were_asked);
+    RUN_TEST(a_seek_past_the_end_clamps);
+    RUN_TEST(a_seek_with_no_file_open_is_an_error);
+}
+
+/* ------------------------------------------------------------------ */
+/* Speed, and the output rate                                          */
+/* ------------------------------------------------------------------ */
+
+TEST speed_2_halves_the_output_length(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+    int        lag = 0;
+    double     err;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
     buf = scratch_buffer(FIXTURE_FRAMES, 1);
     af_stream_set_speed(s, 2.0);
     af_stream_set_playing(s, 1);
 
     d = drain(s, buf, FIXTURE_FRAMES, 64, 1, 5000);
-    ok(!d.timed_out, "timed out");
-    ok(labs((long)d.frames - (long)(FIXTURE_FRAMES / 2)) <= 8,
-       "produced %lu frames at speed 2, wanted about %d",
-       (unsigned long)d.frames, FIXTURE_FRAMES / 2);
+    ASSERTm("timed out", !d.timed_out);
+    ASSERTm(msg("produced %lu frames at speed 2, wanted about %d",
+                (unsigned long)d.frames, FIXTURE_FRAMES / 2),
+            labs((long)d.frames - (long)(FIXTURE_FRAMES / 2)) <= 8);
 
     /* At twice the rate the sine's period halves, from 100 frames to 50: each
      * output frame steps two frames through the file. */
-    {
-        int lag = 0;
-        double err = phase_error(buf + AF_PRIME, 256,
-                                 2.0 * AF_PRIME, 2.0, &lag);
-        ok(err < 0.05, "the sine at speed 2 is off by %.4f at lag %d", err, lag);
-    }
+    err = phase_error(buf + AF_PRIME, 256, 2.0 * AF_PRIME, 2.0, &lag);
+    ASSERTm(msg("the sine at speed 2 is off by %.4f at lag %d", err, lag),
+            err < 0.05);
 
     free(buf);
     af_stream_free(s);
-
-    begin("speed 0.5 doubles it");
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
-    buf = scratch_buffer(FIXTURE_FRAMES * 3, 1);
-    af_stream_set_speed(s, 0.5);
-    af_stream_set_playing(s, 1);
-    d = drain(s, buf, FIXTURE_FRAMES * 3, 64, 1, 8000);
-    ok(!d.timed_out, "timed out");
-    ok(labs((long)d.frames - (long)(FIXTURE_FRAMES * 2)) <= 8,
-       "produced %lu frames at speed 0.5, wanted about %d",
-       (unsigned long)d.frames, FIXTURE_FRAMES * 2);
-    free(buf);
-    af_stream_free(s);
-
-    begin("a file at a different rate is resampled to the output rate");
-    ok(af_stream_new(&s, 1, 44100.0) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK, "open");
-    ok(info.samplerate == 48000.0, "the file reports %g Hz", info.samplerate);
-    buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
-    af_stream_set_playing(s, 1);
-    d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 5000);
-    ok(!d.timed_out, "timed out");
-    /* 22050 frames of 48000 Hz material is 0.459 s, which is 20256 frames
-     * at 44100 Hz. */
-    ok(labs((long)d.frames - 20256L) <= 16,
-       "produced %lu frames, wanted about 20256", (unsigned long)d.frames);
-    free(buf);
-    af_stream_free(s);
+    PASS();
 }
 
-static void test_loop(void)
+TEST speed_half_doubles_it(void)
 {
     af_stream *s;
     af_info    info;
     float     *buf;
     af_drain   d;
-    uint64_t   pos_before, pos_after;
 
-    begin("looping runs past the end without reporting one");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
+    buf = scratch_buffer(FIXTURE_FRAMES * 3, 1);
+    af_stream_set_speed(s, 0.5);
+    af_stream_set_playing(s, 1);
+
+    d = drain(s, buf, FIXTURE_FRAMES * 3, 64, 1, 8000);
+    ASSERTm("timed out", !d.timed_out);
+    ASSERTm(msg("produced %lu frames at speed 0.5, wanted about %d",
+                (unsigned long)d.frames, FIXTURE_FRAMES * 2),
+            labs((long)d.frames - (long)(FIXTURE_FRAMES * 2)) <= 8);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+TEST a_file_at_another_rate_is_resampled(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+
+    OPEN_FIXTURE(s, info, "sine_mono_48000_s16.wav", 1, 44100.0);
+    ASSERTm(msg("the file reports %g Hz", info.samplerate),
+            info.samplerate == 48000.0);
+
+    buf = scratch_buffer(FIXTURE_FRAMES * 2, 1);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 5000);
+    ASSERTm("timed out", !d.timed_out);
+
+    /* 22050 frames of 48000 Hz material is 0.459 s, which is 20256 frames
+     * at 44100 Hz. */
+    ASSERTm(msg("produced %lu frames, wanted about 20256",
+                (unsigned long)d.frames),
+            labs((long)d.frames - 20256L) <= 16);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+/* Pd's sample rate can change under an object that is already playing -- a
+ * different device, or a patch reopened at another rate. The engine is built
+ * for one rate, so this is the one message that rebuilds it, and the file has
+ * to come back where it was. */
+TEST changing_the_output_rate_keeps_the_file_and_the_position(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+    uint64_t   before, after;
+    int        lag = 0;
+    double     err;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer(8192, 1);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, 4096, 64, 1, 3000);
+    ASSERTm(msg("got %lu frames before the rate changed",
+                (unsigned long)d.frames),
+            d.frames == 4096);
+    before = tell_frames(s);
+
+    af_stream_set_output_samplerate(s, 48000.0);
+
+    ASSERTm("the file is still open", af_stream_info(s, &info) == AF_OK);
+    ASSERTm(msg("info still describes the file, at %g", info.samplerate),
+            info.samplerate == FIXTURE_RATE);
+    ASSERTm(msg("the position moved from %llu to %llu",
+                (unsigned long long)before,
+                (unsigned long long)tell_frames(s)),
+            labs((long)tell_frames(s) - (long)before) <= 64);
+
+    /* The file is reopened and sought behind this, so let it settle before
+     * measuring what comes out. */
+    drain(s, buf, 512, 64, 1, 3000);
+    before = tell_frames(s);
+
+    /* 4800 frames at 48000 Hz is 4410 frames of a 44100 Hz file. */
+    d = drain(s, buf, 4800, 64, 1, 3000);
+    ASSERTm("timed out after the rate changed", !d.timed_out);
+    ASSERTm(msg("got %lu frames at the new rate", (unsigned long)d.frames),
+            d.frames == 4800);
+
+    after = tell_frames(s);
+    ASSERTm(msg("the position advanced by %ld file frames, wanted about 4410",
+                (long)(after - before)),
+            labs((long)(after - before) - 4410L) <= 64);
+
+    err = phase_error(buf + AF_PRIME, 512, (double)(before + AF_PRIME),
+                      FIXTURE_RATE / 48000.0, &lag);
+    ASSERTm(msg("the sine after the rate change is off by %.4f at lag %d",
+                err, lag),
+            err < 0.05);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+SUITE(speed)
+{
+    RUN_TEST(speed_2_halves_the_output_length);
+    RUN_TEST(speed_half_doubles_it);
+    RUN_TEST(a_file_at_another_rate_is_resampled);
+    RUN_TEST(changing_the_output_rate_keeps_the_file_and_the_position);
+}
+
+/* ------------------------------------------------------------------ */
+/* Looping                                                             */
+/* ------------------------------------------------------------------ */
+
+TEST looping_runs_past_the_end_without_reporting_one(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+    uint64_t   position;
+    int        lag = 0;
+    double     err;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
     buf = scratch_buffer((size_t)FIXTURE_FRAMES * 2 + 4096, 1);
     af_stream_set_looping(s, 1);
     af_stream_set_playing(s, 1);
 
     d = drain(s, buf, FIXTURE_FRAMES + 4096, 64, 1, 8000);
-    ok(!d.timed_out, "timed out");
-    ok(d.eofs == 0, "eof reported %d times while looping", d.eofs);
-    ok(d.frames == (size_t)FIXTURE_FRAMES + 4096,
-       "produced %lu frames while looping", (unsigned long)d.frames);
+    ASSERTm("timed out", !d.timed_out);
+    ASSERTm(msg("eof reported %d times while looping", d.eofs), d.eofs == 0);
+    ASSERTm(msg("produced %lu frames while looping", (unsigned long)d.frames),
+            d.frames == (size_t)FIXTURE_FRAMES + 4096);
 
     /* The position has to follow the file round, not run past its length. */
-    pos_after = tell_frames(s);
-    ok(pos_after < (uint64_t)FIXTURE_FRAMES,
-       "position reads %llu after wrapping a %d frame file",
-       (unsigned long long)pos_after, FIXTURE_FRAMES);
+    position = tell_frames(s);
+    ASSERTm(msg("position reads %llu after wrapping a %d frame file",
+                (unsigned long long)position, FIXTURE_FRAMES),
+            position < (uint64_t)FIXTURE_FRAMES);
 
     /* And the material after the wrap is the start of the file again. */
-    {
-        int lag = 0;
-        double err = phase_error(buf + FIXTURE_FRAMES + AF_PRIME, 512,
-                                 (double)AF_PRIME, 1.0, &lag);
-        ok(err < 0.05, "the material after the loop point is off by %.4f", err);
-    }
-
-    begin("switching looping off lets the file end");
-    pos_before = tell_frames(s);
-    ok(pos_before <= (uint64_t)FIXTURE_FRAMES, "position is inside the file");
-    af_stream_set_looping(s, 0);
-    d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 8000);
-    ok(d.eofs == 1, "eof reported %d times after looping was switched off", d.eofs);
+    err = phase_error(buf + FIXTURE_FRAMES + AF_PRIME, 512,
+                      (double)AF_PRIME, 1.0, &lag);
+    ASSERTm(msg("the material after the loop point is off by %.4f", err),
+            err < 0.05);
 
     free(buf);
     af_stream_free(s);
+    PASS();
 }
 
-/* The idiom every patch reaches for first is [open sine.wav, run 1( into
+TEST switching_looping_off_lets_the_file_end(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer((size_t)FIXTURE_FRAMES * 2 + 4096, 1);
+    af_stream_set_looping(s, 1);
+    af_stream_set_playing(s, 1);
+
+    d = drain(s, buf, FIXTURE_FRAMES + 4096, 64, 1, 8000);
+    ASSERTm("timed out while looping", !d.timed_out);
+    ASSERTm(msg("position is inside the file: %llu",
+                (unsigned long long)tell_frames(s)),
+            tell_frames(s) <= (uint64_t)FIXTURE_FRAMES);
+
+    af_stream_set_looping(s, 0);
+    d = drain(s, buf, FIXTURE_FRAMES * 2, 64, 1, 8000);
+    ASSERTm(msg("eof reported %d times after looping was switched off", d.eofs),
+            d.eofs == 1);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+SUITE(looping)
+{
+    RUN_TEST(looping_runs_past_the_end_without_reporting_one);
+    RUN_TEST(switching_looping_off_lets_the_file_end);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dropout reporting                                                   */
+/* ------------------------------------------------------------------ */
+
+/* The idiom every patch reaches for first is [open sine.wav, play 1( into
  * [af.play~], with no gap between the two: the audio thread arrives before the
  * stream has read anything ahead. That is the buffer filling up, not the buffer
  * running dry, and telling the patch its audio dropped out before a single
  * frame has been delivered is wrong. */
-static void test_cold_start_is_not_a_dropout(void)
+TEST a_cold_start_does_not_report_a_dropout(void)
 {
     af_info info;
     float  *buf;
     int     trial;
     int     trials_with_reports = 0;
-
-    begin("a cold start does not report a dropout");
 
     buf = scratch_buffer(4096, 1);
 
@@ -545,9 +847,7 @@ static void test_cold_start_is_not_a_dropout(void)
         int reports = 0;
         int i;
 
-        ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-        ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK,
-           "open");
+        OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
         /* No settling time anywhere: this is the point of the test. */
         af_stream_set_playing(s, 1);
@@ -560,16 +860,17 @@ static void test_cold_start_is_not_a_dropout(void)
         af_stream_free(s);
     }
 
-    ok(trials_with_reports == 0,
-       "%d of 20 cold starts reported underflow before delivering a frame",
-       trials_with_reports);
+    ASSERTm(msg("%d of 20 cold starts reported underflow before delivering "
+                "a frame", trials_with_reports),
+            trials_with_reports == 0);
 
     free(buf);
+    PASS();
 }
 
 /* Landing somewhere that has not been read from disk yet is the same thing
  * again: the buffer is refilling, not running dry. */
-static void test_seek_into_unbuffered_is_not_a_dropout(void)
+TEST a_seek_into_an_unbuffered_region_does_not_report_a_dropout(void)
 {
     af_stream *s;
     af_info    info;
@@ -577,10 +878,7 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
     int        trial;
     int        trials_with_reports = 0;
 
-    begin("a seek into an unbuffered region does not report a dropout");
-
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
     buf = scratch_buffer(4096, 1);
     af_stream_set_playing(s, 1);
@@ -591,7 +889,8 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
         int reports = 0;
         int i;
 
-        ok(af_stream_seek_seconds(s, (500 + trial * 311) / FIXTURE_RATE) == AF_OK, "seek");
+        ASSERTm("seek",
+                af_stream_seek_seconds(s, (500 + trial * 311) / FIXTURE_RATE) == AF_OK);
         for (i = 0; i < 8; i++) {
             af_stream_read(s, buf, 64);
             if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
@@ -599,12 +898,13 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
         if (reports > 0) trials_with_reports++;
     }
 
-    ok(trials_with_reports == 0,
-       "%d of 20 seeks reported underflow while re-buffering",
-       trials_with_reports);
+    ASSERTm(msg("%d of 20 seeks reported underflow while re-buffering",
+                trials_with_reports),
+            trials_with_reports == 0);
 
     free(buf);
     af_stream_free(s);
+    PASS();
 }
 
 /* A stall that is genuinely the buffer running dry, so that it survives the
@@ -615,7 +915,7 @@ static void test_seek_into_unbuffered_is_not_a_dropout(void)
  * every output frame now eats 32 frames of the file, so a block of 8192 wants a
  * quarter of a million frames, which is more than any read-ahead is going to
  * have ready. Looping stops the file simply ending instead. */
-static void test_underflow(void)
+TEST a_stall_is_reported_once_not_once_per_block(void)
 {
     af_stream *s;
     af_info    info;
@@ -623,28 +923,27 @@ static void test_underflow(void)
     int        short_reads = 0, reports = 0;
     int        i;
 
-    begin("a stall is reported once, not once per block");
-
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
     buf = scratch_buffer(8192, 1);
     af_stream_set_looping(s, 1);
     af_stream_set_playing(s, 1);
-    ok(settle(s, buf, 64), "the stream never got going");
+    ASSERTm("the stream never got going", settle(s, buf, 64));
 
     af_stream_set_speed(s, AF_SPEED_MAX);
     for (i = 0; i < 40; i++) {
         if (af_stream_read(s, buf, 8192) < 8192) short_reads++;
         if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
     }
-    ok(short_reads == 40, "%d of 40 reads fell short: nothing stalled", short_reads);
-    ok(reports == 1, "%d underflow reports across one stall", reports);
+    ASSERTm(msg("%d of 40 reads fell short: nothing stalled", short_reads),
+            short_reads == 40);
+    ASSERTm(msg("%d underflow reports across one stall", reports),
+            reports == 1);
 
     /* A seek ends the stall, so the next one is a new one. */
-    ok(af_stream_seek_seconds(s, 0.0) == AF_OK, "seek");
+    ASSERTm("seek", af_stream_seek_seconds(s, 0.0) == AF_OK);
     af_stream_set_speed(s, 1.0);
-    ok(settle(s, buf, 64), "the stream never got going again");
+    ASSERTm("the stream never got going again", settle(s, buf, 64));
 
     af_stream_set_speed(s, AF_SPEED_MAX);
     short_reads = reports = 0;
@@ -652,200 +951,102 @@ static void test_underflow(void)
         if (af_stream_read(s, buf, 8192) < 8192) short_reads++;
         if (af_stream_read_events(s) & AF_EVENT_UNDERFLOW) reports++;
     }
-    ok(short_reads == 40, "%d of 40 reads fell short in the second stall", short_reads);
-    ok(reports == 1, "%d underflow reports across the second stall", reports);
+    ASSERTm(msg("%d of 40 reads fell short in the second stall", short_reads),
+            short_reads == 40);
+    ASSERTm(msg("%d underflow reports across the second stall", reports),
+            reports == 1);
 
     free(buf);
     af_stream_free(s);
+    PASS();
 }
 
-/* Pd's sample rate can change under an object that is already playing -- a
- * different device, or a patch reopened at another rate. The engine is built
- * for one rate, so this is the one message that rebuilds it, and the file has
- * to come back where it was. */
-static void test_output_samplerate_change(void)
+SUITE(dropouts)
+{
+    RUN_TEST(a_cold_start_does_not_report_a_dropout);
+    RUN_TEST(a_seek_into_an_unbuffered_region_does_not_report_a_dropout);
+    RUN_TEST(a_stall_is_reported_once_not_once_per_block);
+}
+
+/* ------------------------------------------------------------------ */
+/* Opening, closing and freeing                                        */
+/* ------------------------------------------------------------------ */
+
+TEST opening_a_second_file_replaces_the_first(void)
 {
     af_stream *s;
     af_info    info;
     float     *buf;
-    af_drain   d;
-    uint64_t   before, after;
 
-    begin("changing the output rate keeps the file and the position");
-
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
-
-    buf = scratch_buffer(8192, 1);
-    af_stream_set_playing(s, 1);
-    d = drain(s, buf, 4096, 64, 1, 3000);
-    ok(d.frames == 4096, "got %lu frames before the rate changed",
-       (unsigned long)d.frames);
-    before = tell_frames(s);
-
-    af_stream_set_output_samplerate(s, 48000.0);
-
-    ok(af_stream_info(s, &info) == AF_OK, "the file is still open");
-    ok(info.samplerate == FIXTURE_RATE, "info still describes the file, at %g",
-       info.samplerate);
-    ok(labs((long)tell_frames(s) - (long)before) <= 64,
-       "the position moved from %llu to %llu",
-       (unsigned long long)before,
-       (unsigned long long)tell_frames(s));
-
-    /* The file is reopened and sought behind this, so let it settle before
-     * measuring what comes out. */
-    drain(s, buf, 512, 64, 1, 3000);
-    before = tell_frames(s);
-
-    /* 4800 frames at 48000 Hz is 4410 frames of a 44100 Hz file. */
-    d = drain(s, buf, 4800, 64, 1, 3000);
-    ok(!d.timed_out, "timed out after the rate changed");
-    ok(d.frames == 4800, "got %lu frames at the new rate", (unsigned long)d.frames);
-
-    after = tell_frames(s);
-    ok(labs((long)(after - before) - 4410L) <= 64,
-       "the position advanced by %ld file frames, wanted about 4410",
-       (long)(after - before));
-
-    {
-        int lag = 0;
-        double err = phase_error(buf + AF_PRIME, 512, (double)(before + AF_PRIME),
-                                 FIXTURE_RATE / 48000.0, &lag);
-        ok(err < 0.05, "the sine after the rate change is off by %.4f at lag %d",
-           err, lag);
-    }
-
-    free(buf);
-    af_stream_free(s);
-}
-
-static void test_open_replaces(void)
-{
-    af_stream *s;
-    af_info    info;
-    float     *buf;
-    af_status  status;
-
-    begin("opening a second file replaces the first and stops playback");
-
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK, "open");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
     buf = scratch_buffer(4096, 1);
     af_stream_set_playing(s, 1);
     drain(s, buf, 2048, 64, 1, 2000);
 
-    ok(af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK,
-       "second open");
-    ok(info.samplerate == 48000.0, "info follows the new file");
-    ok(af_stream_read(s, buf, 64) == 0, "playback did not stop");
-    ok(tell_frames(s) == 0, "the position did not go back to zero");
-
-    begin("a failed open leaves the file that was open alone");
-    status = af_stream_open(s, fixture("no_such_file.wav"), &info);
-    ok(status == AF_ERR_OPEN, "status %s", af_status_string(status));
-    ok(af_stream_info(s, &info) == AF_OK, "the previous file is still open");
-    ok(info.samplerate == 48000.0, "and it is still the same one");
-
-    begin("close, and what happens after it");
-    af_stream_close(s);
-    ok(af_stream_info(s, &info) == AF_ERR_NOFILE, "info after close");
-    af_stream_set_playing(s, 1);
-    ok(af_stream_read(s, buf, 64) == 0, "reading after close produced frames");
+    ASSERTm("second open",
+            af_stream_open(s, fixture("sine_mono_48000_s16.wav"), &info) == AF_OK);
+    ASSERTm("info follows the new file", info.samplerate == 48000.0);
+    ASSERTm("playback did not stop", af_stream_read(s, buf, 64) == 0);
+    ASSERTm("the position did not go back to zero",
+            af_stream_tell_seconds(s) == 0.0);
 
     free(buf);
     af_stream_free(s);
+    PASS();
 }
 
-static void test_channels(void)
+TEST a_failed_open_leaves_the_file_that_was_open_alone(void)
+{
+    af_stream *s;
+    af_info    info;
+    af_status  status;
+
+    OPEN_FIXTURE(s, info, "sine_mono_48000_s16.wav", 1, FIXTURE_RATE);
+
+    status = af_stream_open(s, fixture("no_such_file.wav"), &info);
+    ASSERTm(msg("status %s", af_status_string(status)), status == AF_ERR_OPEN);
+    ASSERTm("the previous file is still open",
+            af_stream_info(s, &info) == AF_OK);
+    ASSERTm("and it is still the same one", info.samplerate == 48000.0);
+
+    af_stream_free(s);
+    PASS();
+}
+
+TEST close_and_what_happens_after_it(void)
 {
     af_stream *s;
     af_info    info;
     float     *buf;
-    af_drain   d;
 
-    begin("a stereo file into two channels keeps them apart");
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
-    ok(af_stream_new(&s, 2, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_stereo_44100_s16.wav"), &info) == AF_OK, "open");
-    ok(info.channels == 2, "channels %u", info.channels);
-
-    buf = scratch_buffer(4096, 2);
+    buf = scratch_buffer(4096, 1);
+    af_stream_close(s);
+    ASSERTm("info after close", af_stream_info(s, &info) == AF_ERR_NOFILE);
     af_stream_set_playing(s, 1);
-    d = drain(s, buf, 1024, 64, 2, 3000);
-    ok(d.frames == 1024, "got %lu frames", (unsigned long)d.frames);
-
-    /* The fixture inverts its second channel. */
-    {
-        double worst = 0.0;
-        size_t i;
-        for (i = 8; i < 1024; i++) {
-            double err = fabs((double)buf[i * 2] + (double)buf[i * 2 + 1]);
-            if (err > worst) worst = err;
-        }
-        ok(worst < 0.01, "the two channels are not mirrored: off by %.4f", worst);
-    }
+    ASSERTm("reading after close produced frames",
+            af_stream_read(s, buf, 64) == 0);
 
     free(buf);
     af_stream_free(s);
-}
-
-/* The reason this matters: [af.play~] and [af.info] are meant to answer with
- * the same four elements for the same file. A decoder configured for playback
- * describes the playback, so the two would drift apart without care. */
-static void test_info_describes_the_file(void)
-{
-    af_stream *s;
-    af_info    stream_info, probe_info;
-
-    begin("info describes the file, not the playback settings");
-
-    /* One channel out, two in, and the file's own rate unlike the output's. */
-    ok(af_stream_new(&s, 1, 22050.0) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("sine_stereo_44100_s16.wav"), &stream_info) == AF_OK,
-       "open");
-    ok(af_probe(fixture("sine_stereo_44100_s16.wav"), &probe_info) == AF_OK, "probe");
-
-    ok(stream_info.channels == probe_info.channels,
-       "channels: the stream says %u, the file says %u",
-       stream_info.channels, probe_info.channels);
-    ok(stream_info.samplerate == probe_info.samplerate,
-       "samplerate: the stream says %g, the file says %g",
-       stream_info.samplerate, probe_info.samplerate);
-    ok(stream_info.frames == probe_info.frames,
-       "frames: the stream says %llu, the file says %llu",
-       (unsigned long long)stream_info.frames,
-       (unsigned long long)probe_info.frames);
-    ok(strcmp(stream_info.format, probe_info.format) == 0,
-       "format: the stream says %s, the file says %s",
-       stream_info.format, probe_info.format);
-
-    /* And `info` on the open file has to say the same thing again. */
-    ok(af_stream_info(s, &stream_info) == AF_OK, "info");
-    ok(stream_info.channels == probe_info.channels, "info channels %u",
-       stream_info.channels);
-
-    af_stream_free(s);
+    PASS();
 }
 
 /* miniaudio's job thread can be mid-read when a file is replaced or the object
  * goes away, and ma_sound_uninit has to survive that. */
-static void test_teardown_while_playing(void)
+TEST closing_and_freeing_while_the_stream_is_reading_ahead(void)
 {
     af_stream *s;
     af_info    info;
     float     *buf;
     int        i;
 
-    begin("closing and freeing while the stream is reading ahead");
-
     buf = scratch_buffer(4096, 1);
 
     for (i = 0; i < 8; i++) {
-        ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
-        ok(af_stream_open(s, fixture("sine_mono_44100_s16.wav"), &info) == AF_OK,
-           "open");
+        OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
         af_stream_set_looping(s, 1);
         af_stream_set_playing(s, 1);
         af_stream_read(s, buf, 64);
@@ -855,37 +1056,47 @@ static void test_teardown_while_playing(void)
         if (i % 2) af_stream_close(s);
         af_stream_free(s);
     }
-    ok(1, "eight streams opened and torn down mid-read");
 
     free(buf);
+    PASS();
 }
 
-static void test_construction_errors(void)
+TEST construction_rejects_what_it_cannot_do(void)
 {
     af_stream *s = NULL;
 
-    begin("construction rejects what it cannot do");
-    ok(af_stream_new(&s, 0, FIXTURE_RATE) == AF_ERR_ARGS, "zero channels");
-    ok(af_stream_new(NULL, 2, FIXTURE_RATE) == AF_ERR_ARGS, "no out pointer");
+    ASSERTm("zero channels", af_stream_new(&s, 0, FIXTURE_RATE) == AF_ERR_ARGS);
+    ASSERTm("no out pointer", af_stream_new(NULL, 2, FIXTURE_RATE) == AF_ERR_ARGS);
 
-    ok(af_stream_new(&s, 2, FIXTURE_RATE) == AF_OK, "af_stream_new");
-    ok(af_stream_open(s, fixture("garbage.wav"), NULL) == AF_ERR_FORMAT,
-       "opening a malformed file");
-    ok(af_stream_open(s, NULL, NULL) == AF_ERR_ARGS, "opening nothing");
+    ASSERTm("af_stream_new", af_stream_new(&s, 2, FIXTURE_RATE) == AF_OK);
+    ASSERTm("opening a malformed file",
+            af_stream_open(s, fixture("garbage.wav"), NULL) == AF_ERR_FORMAT);
+    ASSERTm("opening nothing", af_stream_open(s, NULL, NULL) == AF_ERR_ARGS);
     af_stream_free(s);
 
     /* Freeing a stream that never opened anything has to join cleanly too. */
-    ok(af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK, "af_stream_new");
+    ASSERTm("af_stream_new", af_stream_new(&s, 1, FIXTURE_RATE) == AF_OK);
     af_stream_free(s);
     af_stream_free(NULL);
-    ok(1, "freeing an unused stream");
+    PASS();
+}
+
+SUITE(lifecycle)
+{
+    RUN_TEST(opening_a_second_file_replaces_the_first);
+    RUN_TEST(a_failed_open_leaves_the_file_that_was_open_alone);
+    RUN_TEST(close_and_what_happens_after_it);
+    RUN_TEST(closing_and_freeing_while_the_stream_is_reading_ahead);
+    RUN_TEST(construction_rejects_what_it_cannot_do);
 }
 
 /* ------------------------------------------------------------------ */
 
+GREATEST_MAIN_DEFS();
+
 int main(int argc, char **argv)
 {
-    if (argc > 1) g_dir = argv[1];
+    if (argc > 1 && argv[1][0] != '-') g_dir = argv[1];
 
     /* No fixtures means no Python at configure time. Nothing here can run,
      * and every case would fail for want of a file. */
@@ -896,40 +1107,15 @@ int main(int argc, char **argv)
 
     printf("pd-audiofile core tests, fixtures in %s\n\n", g_dir);
 
-    probe_case("sine_mono_44100_s16.wav",   44100.0, FIXTURE_FRAMES, 1, "s16");
-    probe_case("sine_mono_44100_f32.wav",   44100.0, FIXTURE_FRAMES, 1, "f32");
-    probe_case("sine_stereo_44100_s16.wav", 44100.0, FIXTURE_FRAMES, 2, "s16");
-    probe_case("sine_mono_48000_s16.wav",   48000.0, FIXTURE_FRAMES, 1, "s16");
-    probe_case("sine_mono_44100_s16.aiff",  44100.0, FIXTURE_FRAMES, 1, "s16");
-    probe_case("sine_mono_44100_s24.aiff",  44100.0, FIXTURE_FRAMES, 1, "s24");
-    probe_case("trailing_chunk.wav",        44100.0, FIXTURE_FRAMES, 1, "s16");
-    probe_case("sine_mono_44100.flac",      44100.0, FIXTURE_FRAMES, 1, NULL);
-    probe_case("sine_mono_44100.mp3",       44100.0, 0,              1, NULL);
-    probe_case("sine_mono_44100.ogg",       44100.0, 0,              1, NULL);
+    GREATEST_MAIN_BEGIN();
 
-    test_probe_errors();
-    test_truncated();
+    RUN_SUITE(probing);
+    RUN_SUITE(reading);
+    RUN_SUITE(seeking);
+    RUN_SUITE(speed);
+    RUN_SUITE(looping);
+    RUN_SUITE(dropouts);
+    RUN_SUITE(lifecycle);
 
-    test_read_whole_file("sine_mono_44100_s16.wav",  1);
-    test_read_whole_file("sine_mono_44100_f32.wav",  1);
-    test_read_whole_file("sine_mono_44100_s16.aiff", 1);
-    test_read_whole_file("sine_mono_44100_s24.aiff", 1);
-    test_read_whole_file("trailing_chunk.wav",       1);
-    test_read_whole_file("sine_mono_44100.flac",     1);
-
-    test_channels();
-    test_seek();
-    test_speed();
-    test_loop();
-    test_cold_start_is_not_a_dropout();
-    test_seek_into_unbuffered_is_not_a_dropout();
-    test_underflow();
-    test_output_samplerate_change();
-    test_open_replaces();
-    test_info_describes_the_file();
-    test_teardown_while_playing();
-    test_construction_errors();
-
-    printf("\n%d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
-    return g_fail == 0 ? 0 : 1;
+    GREATEST_MAIN_END();
 }

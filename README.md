@@ -97,7 +97,7 @@ Rules:
 ## Building
 
 C99 throughout, so any toolchain from the last fifteen years will do. Nothing
-else is needed beyond the two dependencies below.
+else is needed beyond the dependencies below.
 
 ```sh
 cmake -S . -B build
@@ -106,8 +106,8 @@ ctest --test-dir build --output-on-failure
 ```
 
 The build fetches what it cannot find, at pinned versions: Pure Data 0.55-2 for
-`m_pd.h`, and miniaudio 0.11.25. Point it at copies you already have to skip
-that:
+`m_pd.h`, miniaudio 0.11.25, and greatest 1.5.0, which the tests are written
+against. Point it at copies you already have to skip that:
 
 ```sh
 cmake -S . -B build \
@@ -123,6 +123,7 @@ alone does not provide: add `-DPD_LIBRARY=<path to pd.lib>`.
 | `PD_INCLUDE_DIR` | fetched | directory containing `m_pd.h` |
 | `PD_LIBRARY` | searched | `pd.lib`; Windows only |
 | `MINIAUDIO_INCLUDE_DIR` | fetched | directory containing `miniaudio.h` |
+| `GREATEST_INCLUDE_DIR` | fetched | directory containing `greatest.h`; tests only |
 | `AUDIOFILE_USE_HOST_MINIAUDIO` | `OFF` | link against the miniaudio the host compiles |
 | `AUDIOFILE_HOST_MINIAUDIO_DEFINES` | empty | the `MA_NO_*` macros the host compiled it with |
 | `PD_EXECUTABLE` | searched | `pd`, for the smoke test |
@@ -165,11 +166,11 @@ cmake -S . -B build -DAUDIOFILE_USE_HOST_MINIAUDIO=ON \
 
 ## Testing
 
-`tests/test_core.c` covers the core with no Pd involved: the header facts of
-each fixture, a file read end to end against its frame count, the phase of the
-block after a seek, output length against speed and sample-rate conversion, a
-forced stall reported once, and the error paths for a missing, malformed or
-truncated file.
+`tests/test_core.c` covers the core with no Pd involved, in seven suites run by
+greatest: the header facts of each fixture, a file read end to end against its
+frame count, the phase of the block after a seek, output length against speed
+and sample-rate conversion, a forced stall reported once, and the error paths
+for a missing, malformed or truncated file.
 
 Fixtures are generated rather than committed, by `tests/make_fixtures.py`: a
 441 Hz sine at 44100 Hz, 100 frames per cycle, as WAV PCM-16, WAV float-32, 16-
@@ -287,4 +288,5 @@ After that it is the buffer running dry, reported once per stall.
 
 zlib, see [LICENSE](LICENSE). miniaudio is Unlicense OR MIT-0, and including
 Pd's `m_pd.h` imposes nothing, so applications that embed Pd can use these
-objects whatever their own licence is.
+objects whatever their own licence is. greatest is ISC, and is built into the
+tests alone.

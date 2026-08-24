@@ -20,11 +20,13 @@ include(FetchContent)
 set(PD_GIT_TAG        "0.55-2" CACHE STRING "Pure Data tag to fetch m_pd.h from")
 set(MINIAUDIO_GIT_TAG "9634bedb5b5a2ca38c1ee7108a9358a4e233f14d"
     CACHE STRING "miniaudio commit to fetch (0.11.25)")
+set(GREATEST_GIT_TAG  "v1.5.0" CACHE STRING "greatest tag to fetch, for the tests")
 
 set(PD_INCLUDE_DIR        "" CACHE PATH   "Directory containing m_pd.h")
 set(PD_LIBRARY            "" CACHE FILEPATH "pd.lib -- required on Windows only")
 set(PD_EXECUTABLE         "" CACHE FILEPATH "pd, for the smoke test; found if not set")
 set(MINIAUDIO_INCLUDE_DIR "" CACHE PATH   "Directory containing miniaudio.h")
+set(GREATEST_INCLUDE_DIR  "" CACHE PATH   "Directory containing greatest.h")
 
 option(AUDIOFILE_USE_HOST_MINIAUDIO
        "Link against the miniaudio the host application compiles, rather than compiling one"
@@ -202,10 +204,27 @@ if(AUDIOFILE_BUILD_TESTS)
 
     find_package(Python3 COMPONENTS Interpreter)
 
+    if(GREATEST_INCLUDE_DIR STREQUAL "")
+        message(STATUS "GREATEST_INCLUDE_DIR not set: fetching greatest ${GREATEST_GIT_TAG}")
+        FetchContent_Declare(greatest
+            GIT_REPOSITORY https://github.com/silentbicycle/greatest.git
+            GIT_TAG        ${GREATEST_GIT_TAG}
+            GIT_SHALLOW    TRUE
+            SOURCE_SUBDIR  headers-only)
+        FetchContent_MakeAvailable(greatest)
+        set(GREATEST_INCLUDE_DIR "${greatest_SOURCE_DIR}")
+    endif()
+
+    if(NOT EXISTS "${GREATEST_INCLUDE_DIR}/greatest.h")
+        message(FATAL_ERROR "greatest.h not found in ${GREATEST_INCLUDE_DIR}")
+    endif()
+    message(STATUS "greatest: ${GREATEST_INCLUDE_DIR}")
+
     set(AUDIOFILE_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
 
     add_executable(test_core tests/test_core.c)
     target_link_libraries(test_core PRIVATE audiofile_core)
+    target_include_directories(test_core SYSTEM PRIVATE ${GREATEST_INCLUDE_DIR})
     target_compile_definitions(test_core PRIVATE ${AUDIOFILE_TEST_DEFINES})
     if(NOT MSVC)
         target_compile_options(test_core PRIVATE -Wall -Wextra)
