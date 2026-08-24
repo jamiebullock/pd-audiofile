@@ -607,7 +607,7 @@ TEST speed_2_halves_the_output_length(void)
     PASS();
 }
 
-TEST speed_half_doubles_it(void)
+TEST speed_half_doubles_the_output_length(void)
 {
     af_stream *s;
     af_info    info;
@@ -718,7 +718,7 @@ TEST changing_the_output_rate_keeps_the_file_and_the_position(void)
 SUITE(speed)
 {
     RUN_TEST(speed_2_halves_the_output_length);
-    RUN_TEST(speed_half_doubles_it);
+    RUN_TEST(speed_half_doubles_the_output_length);
     RUN_TEST(a_file_at_another_rate_is_resampled);
     RUN_TEST(changing_the_output_rate_keeps_the_file_and_the_position);
 }
@@ -972,7 +972,7 @@ TEST a_failed_open_leaves_the_file_that_was_open_alone(void)
     PASS();
 }
 
-TEST close_and_what_happens_after_it(void)
+TEST close_leaves_no_file_to_read(void)
 {
     af_stream *s;
     af_info    info;
@@ -1039,7 +1039,7 @@ SUITE(lifecycle)
 {
     RUN_TEST(opening_a_second_file_replaces_the_first);
     RUN_TEST(a_failed_open_leaves_the_file_that_was_open_alone);
-    RUN_TEST(close_and_what_happens_after_it);
+    RUN_TEST(close_leaves_no_file_to_read);
     RUN_TEST(closing_and_freeing_while_the_stream_is_reading_ahead);
     RUN_TEST(construction_rejects_what_it_cannot_do);
 }
