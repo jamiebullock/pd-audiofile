@@ -68,7 +68,6 @@ static int exists(const char *path)
     return 1;
 }
 
-/* greatest holds the pointer and prints it once the test has returned. */
 static const char *msg(const char *fmt, ...)
 {
     static char text[512];
@@ -82,7 +81,7 @@ static const char *msg(const char *fmt, ...)
 }
 
 /* ------------------------------------------------------------------ */
-/* Reading, the way a perform routine would                            */
+/* Reading                                                            */
 /* ------------------------------------------------------------------ */
 
 typedef struct {
@@ -123,7 +122,7 @@ static af_drain drain(af_stream *s, float *out, size_t limit,
 }
 
 /* Reads until a block comes back whole, which clears the stalled state, so a
- * stall raised after this is a new one. */
+ * stall raised after this is new. */
 static int settle(af_stream *s, float *buf, size_t frames)
 {
     int waited = 0;
@@ -192,7 +191,7 @@ static double phase_error(const float *buf, size_t frames, double start_frame,
     } while (0)
 
 /* ------------------------------------------------------------------ */
-/* Probing                                                             */
+/* Probing                                                            */
 /* ------------------------------------------------------------------ */
 
 TEST probe_reports_the_header(const char *name, double rate, uint64_t frames,
@@ -285,7 +284,7 @@ SUITE(probing)
 }
 
 /* ------------------------------------------------------------------ */
-/* Streaming                                                           */
+/* Streaming                                                          */
 /* ------------------------------------------------------------------ */
 
 TEST reads_end_to_end(const char *name, uint32_t channels)
@@ -386,9 +385,6 @@ TEST a_stereo_file_keeps_its_channels_apart(void)
     PASS();
 }
 
-/* [af.play~] and [af.info] answer with the same four elements for one file,
- * so what the stream reports has to be the file's rather than the settings it
- * was opened with. */
 TEST info_describes_the_file_not_the_playback(void)
 {
     af_stream *s;
@@ -444,7 +440,7 @@ SUITE(reading)
 }
 
 /* ------------------------------------------------------------------ */
-/* Seeking                                                             */
+/* Seeking                                                            */
 /* ------------------------------------------------------------------ */
 
 TEST a_seek_lands_where_it_was_asked(void)
@@ -490,8 +486,6 @@ TEST a_seek_lands_where_it_was_asked(void)
     PASS();
 }
 
-/* A seek that has not taken effect before the block it is asked for shows up
- * under repetition. */
 TEST repeated_seeks_land_where_they_were_asked(void)
 {
     af_stream *s;
@@ -579,7 +573,7 @@ SUITE(seeking)
 }
 
 /* ------------------------------------------------------------------ */
-/* Speed, and the output rate                                          */
+/* Speed, and the output rate                                         */
 /* ------------------------------------------------------------------ */
 
 TEST speed_2_halves_the_output_length(void)
@@ -664,9 +658,6 @@ TEST a_file_at_another_rate_is_resampled(void)
     PASS();
 }
 
-/* Pd's sample rate can change under an object that is already playing: a
- * different device, or a patch reopened at another rate. The engine is built
- * for one rate, so this message rebuilds it. */
 TEST changing_the_output_rate_keeps_the_file_and_the_position(void)
 {
     af_stream *s;
@@ -733,7 +724,7 @@ SUITE(speed)
 }
 
 /* ------------------------------------------------------------------ */
-/* Looping                                                             */
+/* Looping                                                            */
 /* ------------------------------------------------------------------ */
 
 TEST looping_runs_past_the_end_without_reporting_one(void)
@@ -758,7 +749,6 @@ TEST looping_runs_past_the_end_without_reporting_one(void)
     ASSERTm(msg("produced %lu frames while looping", (unsigned long)d.frames),
             d.frames == (size_t)FIXTURE_FRAMES + 4096);
 
-    /* The position has to follow the file round. */
     position = tell_frames(s);
     ASSERTm(msg("position reads %llu after wrapping a %d frame file",
                 (unsigned long long)position, FIXTURE_FRAMES),
@@ -810,12 +800,9 @@ SUITE(looping)
 }
 
 /* ------------------------------------------------------------------ */
-/* Dropout reporting                                                   */
+/* Dropout reporting                                                  */
 /* ------------------------------------------------------------------ */
 
-/* [open sine.wav, play 1( in one message is the first thing a patch does, and
- * the audio thread then arrives before the stream has read anything ahead.
- * That is the buffer filling up, not the buffer running dry. */
 TEST a_cold_start_does_not_report_a_dropout(void)
 {
     af_info info;
@@ -832,7 +819,6 @@ TEST a_cold_start_does_not_report_a_dropout(void)
 
         OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
 
-        /* No settling time: that is the point. */
         af_stream_set_playing(s, 1);
         for (i = 0; i < 8; i++) {
             af_stream_read(s, buf, 64);
@@ -851,8 +837,6 @@ TEST a_cold_start_does_not_report_a_dropout(void)
     PASS();
 }
 
-/* Landing somewhere not yet read from disk is the buffer refilling, not the
- * buffer running dry. */
 TEST a_seek_into_an_unbuffered_region_does_not_report_a_dropout(void)
 {
     af_stream *s;
@@ -890,9 +874,6 @@ TEST a_seek_into_an_unbuffered_region_does_not_report_a_dropout(void)
     PASS();
 }
 
-/* At AF_SPEED_MAX every output frame eats 32 frames of the file, so a block of
- * 8192 wants a quarter of a million and no read-ahead has them ready. Looping
- * keeps the file from ending first. */
 TEST a_stall_is_reported_once_not_once_per_block(void)
 {
     af_stream *s;
@@ -918,7 +899,6 @@ TEST a_stall_is_reported_once_not_once_per_block(void)
     ASSERTm(msg("%d underflow reports across one stall", reports),
             reports == 1);
 
-    /* A seek ends the stall, so the next one is a new one. */
     ASSERTm("seek", af_stream_seek_seconds(s, 0.0) == AF_OK);
     af_stream_set_speed(s, 1.0);
     ASSERTm("the stream never got going again", settle(s, buf, 64));
@@ -947,7 +927,7 @@ SUITE(dropouts)
 }
 
 /* ------------------------------------------------------------------ */
-/* Opening, closing and freeing                                        */
+/* Opening, closing and freeing                                       */
 /* ------------------------------------------------------------------ */
 
 TEST opening_a_second_file_replaces_the_first(void)
@@ -1012,8 +992,6 @@ TEST close_and_what_happens_after_it(void)
     PASS();
 }
 
-/* miniaudio's job thread can be mid-read when a file is replaced or the object
- * goes away, and ma_sound_uninit has to survive that. */
 TEST closing_and_freeing_while_the_stream_is_reading_ahead(void)
 {
     af_stream *s;
@@ -1029,8 +1007,6 @@ TEST closing_and_freeing_while_the_stream_is_reading_ahead(void)
         af_stream_set_playing(s, 1);
         af_stream_read(s, buf, 64);
 
-        /* No settling time on purpose: the stream is most likely to be
-         * mid-read right now. */
         if (i % 2) af_stream_close(s);
         af_stream_free(s);
     }
@@ -1077,7 +1053,7 @@ int main(int argc, char **argv)
     if (argc > 1 && argv[1][0] != '-') g_dir = argv[1];
 
     /* No fixtures means no Python at configure time, and every case would
-     * fail for want of a file. */
+     * fail */
     if (!exists(fixture("sine_mono_44100_s16.wav"))) {
         printf("no fixtures in %s: skipping\n", g_dir);
         return 77;
