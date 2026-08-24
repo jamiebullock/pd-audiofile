@@ -5,7 +5,7 @@ A sound-file library for [Pure Data](https://puredata.info), built on
 
 | Object | Kind | Does |
 | --- | --- | --- |
-| `[af.info]` | control | reports sample rate, frame count, channels and sample format from a file's header |
+| `[af.info]` | control | reports sample rate, duration in seconds, channels and sample format from a file's header |
 | `[af.play~]` | signal | streams a file from disk: start/stop, looping, speed, seek, position |
 
 Formats: WAV, AIFF/AIFC, RF64, W64, FLAC, MP3, and Vorbis where miniaudio's
