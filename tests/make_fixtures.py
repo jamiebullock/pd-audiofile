@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Generate the test fixtures.
 
-Written rather than committed, so that what the tests assert about a file can
-be read here instead of guessed at from a binary. The signal is a 441 Hz sine
-at 44100 Hz -- exactly 100 samples per cycle -- so the expected value of frame
-n is sin(2*pi*n/100) whatever the container, and a test can check where a seek
-landed by looking at the phase.
+Generated rather than committed, so what the tests assert about a file can be
+read here. A signal known frame by frame is what lets a test check where a
+seek landed, by looking at the phase.
 
-WAV and AIFF are written here, by hand, because they are what the header
-parsing has to get right and because a stdlib module that writes them is not
-something to rely on any more. FLAC, MP3 and Vorbis are handed to ffmpeg when
-it is on the path; the C tests skip whatever is missing.
+WAV and AIFF are written here by hand: they are what the header parsing has to
+get right, and Python removed aifc in 3.13. FLAC, MP3 and Vorbis are handed to
+ffmpeg when it is on the path; the C tests skip whatever is missing.
 
 Part of pd-audiofile
 
@@ -27,21 +24,15 @@ import subprocess
 import sys
 
 RATE = 44100
-FREQ = 441.0          # exactly RATE / 100
-FRAMES = 22050        # half a second, 220.5 cycles
+FREQ = 441.0          # a cycle is exactly 100 frames
+FRAMES = 22050        # half a second
 AMP = 0.5
 
 
 def sine(frames, rate=RATE, channels=1, freq=FREQ, amp=AMP):
-    """Interleaved floats.
-
-    Channel 1, if present, is inverted -- the channels are mirrored, in
-    anti-phase. That is what lets test_channels assert the two are kept apart
-    rather than smeared together, by checking that they sum to zero.
-
-    Be aware of it when using these fixtures for anything else: mixing
-    sine_stereo_44100_s16.wav down to mono cancels to exact silence, which
-    looks like a decoding failure and is not one.
+    """Interleaved floats. Channel 1, if present, is inverted, so the two sum
+    to zero: that is how the stereo test checks they are kept apart, and why a
+    mono downmix of sine_stereo_44100_s16.wav is exact silence.
     """
     out = []
     for n in range(frames):
@@ -112,8 +103,7 @@ def wav_trailing_chunk(path, samples, channels, rate=RATE):
 
 def wav_truncated(path, samples, channels, rate=RATE, keep=0.4):
     """The header claims the full length; the file stops part way through the
-    audio. Decoders differ on whether this is an error or a short file, so the
-    test asserts only that it neither crashes nor reports the full length."""
+    audio."""
     data = to_s16(samples)
     fmt = struct.pack("<HHIIHH", 1, channels, rate,
                       rate * channels * 2, channels * 2, 16)

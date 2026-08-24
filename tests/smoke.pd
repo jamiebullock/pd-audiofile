@@ -16,11 +16,10 @@
 #X msg 550 110 \; pd quit;
 #X obj 230 250 af.play~ 1;
 #X obj 230 320 print PLAY;
-#X text 30 360 Loaded headless by tests/run_pd_smoke.py. Not a demonstration
-patch: see the help files for that.;
+#X text 30 360 Loaded headless by tests/run_pd_smoke.py. The help files
+are the demonstration patches.;
 #X text 30 400 The open and play are sent as one message with no gap
-between them on purpose \, because that is where a stream reports a
-dropout it has not had.;
+between them: that is where a stream reports a dropout it has not had.;
 #X connect 0 0 1 0;
 #X connect 0 0 2 0;
 #X connect 0 0 3 0;

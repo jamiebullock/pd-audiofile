@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Load the library into a headless Pd and check the objects work there.
 
-The C tests exercise the core with no Pd anywhere near it. This checks the part
-they cannot: that the binary loads as `-lib audiofile`, that the classes create,
-and that they answer. Windows is where loading is most likely to break, which is
-why this is Python rather than a shell script.
+This checks what the C tests cannot: that the binary loads as `-lib audiofile`,
+that the classes create, and that they answer. It is Python rather than a shell
+script so that it runs on Windows, where loading is most likely to break.
 
 Exits 77 when no Pd can be found, which CMake reads as a skip.
 
@@ -26,9 +25,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# What tests/smoke.pd should print. The `error` line is the interesting one:
-# `open …, run 1` in a single message used to report a dropout before a frame
-# had been delivered, and nothing in the C tests would have caught it in Pd.
+# What tests/smoke.pd should print.
 EXPECTED = [
     "INFO: info 44100 22050 1 s16",
     "PLAY: info 44100 22050 1 s16",
@@ -36,6 +33,8 @@ EXPECTED = [
     "PLAY: eof",
 ]
 
+# `open ..., play 1` in one message used to report a dropout before a frame had
+# been delivered, which no C test can catch through the object.
 UNEXPECTED = [
     "INFO: error",
     "PLAY: error",
@@ -95,8 +94,8 @@ def main(argv):
     command = [
         pd_bin,
         "-nogui",
-        # -noaudio still runs the scheduler and the DSP chain, off the system
-        # clock, which is all the patch needs.
+        # -noaudio still runs the scheduler and the DSP chain, off the
+        # system clock.
         "-noaudio",
         "-stderr",
         "-path", extdir,
@@ -125,7 +124,7 @@ def main(argv):
     print(log)
 
     # The patch quits Pd itself, so a non-zero status is a crash on the way
-    # out, which is one of the things loading a library here is meant to catch.
+    # out.
     if done.returncode != 0:
         print("Pd exited with status %d" % done.returncode, file=sys.stderr)
         return 1
