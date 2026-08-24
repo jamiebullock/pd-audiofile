@@ -17,14 +17,13 @@ import soundfile
 
 RATE = 44100
 FREQ = 441.0          # a cycle is exactly 100 frames
-FRAMES = 22050        # half a second
+FRAMES = 22050
 AMP = 0.5
 
 
 def sine(frames, rate=RATE, channels=1, freq=FREQ, amp=AMP):
-    """Channel 1, if present, is inverted, so the two sum to zero: that is how
-    the stereo test checks they are kept apart, and why a mono downmix of
-    sine_stereo_44100_s16.wav is exact silence.
+    """The second channel, if present, is inverted, so that a test can tell
+    the two apart.
     """
     v = amp * numpy.sin(2.0 * numpy.pi * freq * numpy.arange(frames) / rate)
     if channels == 1:
@@ -51,8 +50,8 @@ def write_bytes(path, blob):
 
 
 def trailing_chunk(path, samples):
-    """A LIST/INFO chunk after the audio. A parser that assumes `data` is last,
-    or that stops looking once it has found it, gets the frame count wrong."""
+    """A LIST/INFO chunk after the audio: a parser that takes everything past
+    the header as samples gets the frame count wrong."""
     soundfile.write(path, samples, RATE, subtype="PCM_16")
     with open(path, "rb") as f:
         wav = f.read()
@@ -87,7 +86,7 @@ def main():
 
     mono = sine(FRAMES)
     stereo = sine(FRAMES, channels=2)
-    mono48 = sine(FRAMES, rate=48000, freq=480.0)   # a 100-frame cycle again
+    mono48 = sine(FRAMES, rate=48000, freq=480.0)   # a 100-frame cycle at 48000
 
     print("writing fixtures to %s" % os.path.abspath(out))
 

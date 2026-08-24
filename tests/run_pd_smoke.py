@@ -5,7 +5,7 @@ This checks what the C tests cannot: that the binary loads as `-lib audiofile`,
 that the classes create, and that they answer. It is Python rather than a shell
 script so that it runs on Windows, where loading is most likely to break.
 
-Exits 77 when no Pd can be found, which CMake reads as a skip.
+Exits 77 when the fixtures or Pd are missing, which CMake reads as a skip.
 
 usage: run_pd_smoke.py <directory holding the external> <fixture directory>
                        [path to pd]
@@ -33,8 +33,8 @@ EXPECTED = [
     "PLAY: eof",
 ]
 
-# `open ..., play 1` in one message used to report a dropout before a frame had
-# been delivered, which no C test can catch through the object.
+# `PLAY: error` is here because `open ..., play 1` in one message once
+# reported a dropout before a frame had been delivered.
 UNEXPECTED = [
     "INFO: error",
     "PLAY: error",
@@ -108,8 +108,8 @@ def main(argv):
         os.path.join(HERE, "smoke.pd"),
     ]
 
-    # From a directory of its own: -lib tries the working directory first, and
-    # a relative dlopen is refused outright by a hardened macOS process.
+    # From a directory of its own, so that -lib loads what -path points at
+    # rather than something in the working directory.
     with tempfile.TemporaryDirectory() as cwd:
         try:
             done = subprocess.run(command, cwd=cwd, timeout=60,
@@ -127,8 +127,8 @@ def main(argv):
 
     print(log)
 
-    # The patch quits Pd itself, so a non-zero status is a crash on the way
-    # out.
+    # The patch quits Pd itself, so a non-zero status means something else
+    # ended it.
     if done.returncode != 0:
         print("Pd exited with status %d" % done.returncode, file=sys.stderr)
         return 1
