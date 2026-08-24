@@ -44,8 +44,9 @@ UNEXPECTED = [
 
 
 def find_pd(explicit):
-    """Returns (path, explicit). An explicit path that is not there is an
-    error rather than a reason to skip: someone meant that one."""
+    """Return the path to a pd, and whether it was named rather than found.
+    A pd that was named and is not there is an error rather than a reason to
+    skip: someone meant that one."""
     if explicit:
         return explicit, True
     if os.environ.get("PD"):

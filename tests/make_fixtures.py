@@ -22,8 +22,9 @@ AMP = 0.5
 
 
 def sine(frames, rate=RATE, channels=1, freq=FREQ, amp=AMP):
-    """The second channel, if present, is inverted, so that a test can tell
-    the two apart.
+    """Return `frames` samples of a sine, shaped (frames,) for one channel
+    and (frames, channels) for more. The second channel, if present, is
+    inverted, so that a test can tell the two apart.
     """
     v = amp * numpy.sin(2.0 * numpy.pi * freq * numpy.arange(frames) / rate)
     if channels == 1:
@@ -50,8 +51,8 @@ def write_bytes(path, blob):
 
 
 def trailing_chunk(path, samples):
-    """A LIST/INFO chunk after the audio: a parser that takes everything past
-    the header as samples gets the frame count wrong."""
+    """Write a WAV with a LIST/INFO chunk after the audio, which a parser
+    that takes everything past the header as samples measures as too long."""
     soundfile.write(path, samples, RATE, subtype="PCM_16")
     with open(path, "rb") as f:
         wav = f.read()
@@ -62,8 +63,8 @@ def trailing_chunk(path, samples):
 
 
 def truncated(path, samples, keep=0.4):
-    """The header claims the full length; the file stops part way through the
-    audio."""
+    """Write a WAV holding `keep` of its audio, under a header that still
+    declares all of it."""
     soundfile.write(path, samples, RATE, subtype="PCM_16")
     with open(path, "rb") as f:
         blob = f.read()
