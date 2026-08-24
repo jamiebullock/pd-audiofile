@@ -31,7 +31,7 @@
 #X floatatom 391 507 10 0 0 0 - - - 0;
 #X floatatom 501 507 5 0 0 0 - - - 0;
 #X symbolatom 561 507 8 0 0 0 - - - 0;
-#X text 301 531 info: rate \, frames \, chans \, format;
+#X text 301 531 info: rate \, duration \, chans \, format;
 #X obj 341 378 unpack f f;
 #X floatatom 341 418 8 0 0 0 - - - 0;
 #X floatatom 431 418 10 0 0 0 - - - 0;

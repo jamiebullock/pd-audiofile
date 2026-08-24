@@ -5,7 +5,7 @@ A sound-file library for [Pure Data](https://puredata.info), built on
 
 | Object | Kind | Does |
 | --- | --- | --- |
-| `[af.info]` | control | reports sample rate, frame count, channels and sample format from a file's header |
+| `[af.info]` | control | reports sample rate, duration in seconds, channels and sample format from a file's header |
 | `[af.play~]` | signal | streams a file from disk: start/stop, looping, speed, seek, position |
 
 Formats: WAV, AIFF/AIFC, RF64, W64, FLAC, MP3, and Vorbis where miniaudio's
@@ -43,7 +43,7 @@ No creation arguments. One message outlet.
 
 | Selector out | Arguments | When |
 | --- | --- | --- |
-| `info` | samplerate, frames, channels, format-symbol | on `open` |
+| `info` | samplerate, duration in seconds, channels, format-symbol | on `open` |
 | `error` | symbol | the file could not be read, with a short reason |
 
 `[openpanel]` goes through `[open $1(`, as it does into `[readsf~]`.
@@ -71,7 +71,7 @@ count is mixed.
 
 | Selector out | Arguments | When |
 | --- | --- | --- |
-| `info` | samplerate, frames, channels, format-symbol | after `open`, and on `info` |
+| `info` | samplerate, duration in seconds, channels, format-symbol | after `open`, and on `info` |
 | `pos` | seconds | on `getpos` |
 | `eof` | | on reaching the end with looping off |
 | `error` | symbol | any failure, with a short reason |

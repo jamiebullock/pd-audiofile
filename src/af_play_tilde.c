@@ -41,7 +41,7 @@ static void af_play_report_info(t_af_play *x, const af_info *info)
 {
     t_atom out[4];
     SETFLOAT (&out[0], (t_float)info->samplerate);
-    SETFLOAT (&out[1], (t_float)info->frames);
+    SETFLOAT (&out[1], (t_float)info->duration);
     SETFLOAT (&out[2], (t_float)info->channels);
     SETSYMBOL(&out[3], gensym(info->format));
     outlet_anything(x->x_msgout, gensym("info"), 4, out);

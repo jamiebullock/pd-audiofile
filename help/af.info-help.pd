@@ -1,5 +1,5 @@
 #N canvas 355 217 620 505 12;
-#X text 20 40 Reads a file's header and reports its sample rate \, frame count \, channel count and sample format. It reads no audio.;
+#X text 20 40 Reads a file's header and reports its sample rate \, duration in seconds \, channel count and sample format. It reads no audio.;
 #X obj 24 90 bng 19 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000;
 #X obj 24 122 openpanel;
 #X msg 24 154 open \$1;
@@ -11,7 +11,7 @@
 #X floatatom 224 347 5 0 0 0 - - - 0;
 #X symbolatom 284 347 8 0 0 0 - - - 0;
 #X text 24 371 rate;
-#X text 114 371 frames;
+#X text 114 371 duration;
 #X text 224 371 chans;
 #X text 284 371 format;
 #X obj 78 275 print error;
