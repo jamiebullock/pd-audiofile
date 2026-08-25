@@ -20,6 +20,15 @@
 are the demonstration patches.;
 #X text 30 400 The open and play are sent as one message with no gap
 between them: that is where a stream reports a dropout it has not had.;
+#X obj 650 60 delay 1300;
+#X msg 650 110 open no_such_file.wav;
+#X obj 650 150 af.info;
+#X obj 650 190 print MISSING;
+#X text 650 230 A failure has to reach the console as well as the outlet.;
+#X connect 0 0 19 0;
+#X connect 19 0 20 0;
+#X connect 20 0 21 0;
+#X connect 21 0 22 0;
 #X connect 0 0 1 0;
 #X connect 0 0 2 0;
 #X connect 0 0 3 0;
