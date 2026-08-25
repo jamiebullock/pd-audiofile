@@ -33,6 +33,9 @@ typedef struct _af_play {
 static void af_play_fail(t_af_play *x, const char *reason)
 {
     t_atom a;
+
+    pd_error(x, "af.play~: %s", reason);
+
     SETSYMBOL(&a, gensym(reason));
     outlet_anything(x->x_msgout, gensym("error"), 1, &a);
 }

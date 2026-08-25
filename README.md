@@ -44,7 +44,7 @@ No creation arguments. One message outlet.
 | Selector out | Arguments | When |
 | --- | --- | --- |
 | `info` | samplerate, duration in seconds, channels, format-symbol | on `open` |
-| `error` | symbol | the file could not be read, with a short reason |
+| `error` | symbol | the file could not be read, with a short reason; also printed to the Pd console |
 
 `[openpanel]` goes through `[open $1(`, as it does into `[readsf~]`.
 
@@ -74,7 +74,7 @@ count is mixed.
 | `info` | samplerate, duration in seconds, channels, format-symbol | after `open`, and on `info` |
 | `pos` | seconds | on `getpos` |
 | `eof` | | on reaching the end with looping off |
-| `error` | symbol | any failure, with a short reason |
+| `error` | symbol | any failure, with a short reason; also printed to the Pd console |
 
 `[openpanel]` goes through `[open $1(` here too, and a toggle through
 `[play $1(`. `info` reports the same four elements `[af.info]` does.

@@ -21,7 +21,11 @@ typedef struct _af_info {
 static void af_info_fail(t_af_info *x, af_status status)
 {
     t_atom a;
-    SETSYMBOL(&a, gensym(af_status_string(status)));
+    const char *reason = af_status_string(status);
+
+    pd_error(x, "af.info: %s", reason);
+
+    SETSYMBOL(&a, gensym(reason));
     outlet_anything(x->x_out, gensym("error"), 1, &a);
 }
 

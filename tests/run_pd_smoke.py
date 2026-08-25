@@ -27,6 +27,8 @@ EXPECTED = [
     "PLAY: info 44100 0.5 1 s16",
     "PLAY: pos",
     "PLAY: eof",
+    "MISSING: error nofile",
+    "af.info: nofile",
 ]
 
 # `PLAY: error` is here because `open ..., play 1` in one message once
