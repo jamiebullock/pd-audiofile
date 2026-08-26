@@ -107,6 +107,11 @@ static void af_play_play(t_af_play *x, t_floatarg f)
     af_stream_set_playing(x->x_stream, f != 0);
 }
 
+static void af_play_autorestart(t_af_play *x, t_floatarg f)
+{
+    af_stream_set_autorestart(x->x_stream, f != 0);
+}
+
 static void af_play_loop(t_af_play *x, t_floatarg f)
 {
     af_stream_set_looping(x->x_stream, f != 0);
@@ -259,6 +264,8 @@ void af_play_tilde_setup(void)
     class_addmethod(af_play_class, (t_method)af_play_close,  gensym("close"),  A_NULL);
     class_addmethod(af_play_class, (t_method)af_play_play,   gensym("play"),   A_FLOAT,  0);
     class_addmethod(af_play_class, (t_method)af_play_loop,   gensym("loop"),   A_FLOAT,  0);
+    class_addmethod(af_play_class, (t_method)af_play_autorestart,
+                    gensym("autorestart"), A_FLOAT, 0);
     class_addmethod(af_play_class, (t_method)af_play_speed,  gensym("speed"),  A_FLOAT,  0);
     class_addmethod(af_play_class, (t_method)af_play_pos,    gensym("pos"),    A_FLOAT,  0);
     class_addmethod(af_play_class, (t_method)af_play_getpos, gensym("getpos"), A_NULL);

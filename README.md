@@ -64,6 +64,7 @@ count is mixed.
 | `info` | | report `info` for the file already open |
 | `play <0/1>` | float | start and stop |
 | `loop <0/1>` | float | return to the start on reaching the end |
+| `autorestart <0/1>` | float | whether `play 1` rewinds a file that has reached its end; on by default |
 | `speed <f>` | float | playback rate; 1 is the file's own rate |
 | `pos <f>` | float | seek, in seconds from the start |
 | `getpos` | | report `pos` once |

@@ -44,6 +44,7 @@ struct af_stream {
 
     bool playing;
     bool looping;
+    bool autorestart;
     bool seek_pending;
 
     bool eof_reported;
@@ -230,10 +231,11 @@ af_status af_stream_new(af_stream **out, uint32_t channels,
     s = (af_stream *)calloc(1, sizeof(*s));
     if (s == NULL) return AF_ERR_MEMORY;
 
-    s->channels = channels;
-    s->out_rate = out_samplerate;
-    s->info     = af_info_none;
-    s->speed    = 1.0;
+    s->channels    = channels;
+    s->out_rate    = out_samplerate;
+    s->info        = af_info_none;
+    s->speed       = 1.0;
+    s->autorestart = true;
 
     status = af_engine_start(s);
     if (status != AF_OK) {
@@ -367,6 +369,14 @@ void af_stream_close(af_stream *s)
     s->position = 0.0;
 }
 
+static bool af_at_end(af_stream *s)
+{
+    if (s->sound == NULL) return false;
+    if (ma_sound_at_end(s->sound)) return true;
+
+    return s->duration > 0.0 && s->position >= s->duration;
+}
+
 void af_stream_set_playing(af_stream *s, int playing)
 {
     if (s == NULL) return;
@@ -375,10 +385,21 @@ void af_stream_set_playing(af_stream *s, int playing)
     if (s->sound == NULL) return;
 
     if (playing) {
+        /* Starting a sound that is already at its end plays nothing, so a
+           transport stopped and started again would go silent for the rest of
+           the file's life. Rewinding first makes that press play the file. */
+        if (s->autorestart && af_at_end(s)) af_stream_seek_seconds(s, 0.0);
         if (!ma_sound_at_end(s->sound)) ma_sound_start(s->sound);
     } else {
         ma_sound_stop(s->sound);
     }
+}
+
+void af_stream_set_autorestart(af_stream *s, int autorestart)
+{
+    if (s == NULL) return;
+
+    s->autorestart = autorestart != 0;
 }
 
 void af_stream_set_looping(af_stream *s, int looping)
