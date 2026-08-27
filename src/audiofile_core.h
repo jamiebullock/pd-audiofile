@@ -64,10 +64,6 @@ void af_stream_close(af_stream *s);
 
 void af_stream_set_playing(af_stream *s, int playing);
 void af_stream_set_looping(af_stream *s, int looping);
-
-/* Whether playing a file that has reached its end rewinds it first. A stream
-   sitting at its end has nothing left to read, so without this it stays
-   silent until something seeks it. On by default. */
 void af_stream_set_autorestart(af_stream *s, int autorestart);
 
 /* 1 is the file's own rate. Values <= 0 are ignored, the rest clamped. */
