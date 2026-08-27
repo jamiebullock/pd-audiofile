@@ -791,10 +791,72 @@ TEST switching_looping_off_lets_the_file_end(void)
     PASS();
 }
 
+TEST playing_a_spent_file_starts_it_again(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer((size_t)FIXTURE_FRAMES * 2, 1);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, (size_t)FIXTURE_FRAMES * 2, 64, 1, 8000);
+    ASSERTm("timed out on the first play", !d.timed_out);
+    ASSERTm(msg("eof reported %d times, wanted once", d.eofs), d.eofs == 1);
+
+    /* The transport stopped and started again, on a file with nothing left. */
+    af_stream_set_playing(s, 0);
+    af_stream_set_playing(s, 1);
+
+    d = drain(s, buf, (size_t)FIXTURE_FRAMES * 2, 64, 1, 8000);
+    ASSERTm("timed out on the second play", !d.timed_out);
+    ASSERTm(msg("second play produced %lu frames of a %d frame file",
+                (unsigned long)d.frames, FIXTURE_FRAMES),
+            labs((long)d.frames - (long)FIXTURE_FRAMES) <= 8);
+    ASSERTm(msg("eof reported %d times on the second play", d.eofs),
+            d.eofs == 1);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+TEST a_spent_file_holds_its_place_where_that_is_asked_for(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    af_drain   d;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_s16.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer((size_t)FIXTURE_FRAMES * 2, 1);
+    af_stream_set_autorestart(s, 0);
+    af_stream_set_playing(s, 1);
+    d = drain(s, buf, (size_t)FIXTURE_FRAMES * 2, 64, 1, 8000);
+    ASSERTm("timed out on the first play", !d.timed_out);
+
+    af_stream_set_playing(s, 0);
+    af_stream_set_playing(s, 1);
+
+    d = drain(s, buf, (size_t)FIXTURE_FRAMES, 64, 1, 2000);
+    ASSERTm(msg("second play produced %lu frames with autorestart off",
+                (unsigned long)d.frames),
+            d.frames == 0);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
 SUITE(looping)
 {
     RUN_TEST(looping_runs_past_the_end_without_reporting_one);
     RUN_TEST(switching_looping_off_lets_the_file_end);
+    RUN_TEST(playing_a_spent_file_starts_it_again);
+    RUN_TEST(a_spent_file_holds_its_place_where_that_is_asked_for);
 }
 
 /* ------------------------------------------------------------------ */

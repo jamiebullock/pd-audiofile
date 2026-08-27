@@ -64,6 +64,7 @@ void af_stream_close(af_stream *s);
 
 void af_stream_set_playing(af_stream *s, int playing);
 void af_stream_set_looping(af_stream *s, int looping);
+void af_stream_set_autorestart(af_stream *s, int autorestart);
 
 /* 1 is the file's own rate. Values <= 0 are ignored, the rest clamped. */
 void af_stream_set_speed(af_stream *s, double speed);
