@@ -385,9 +385,6 @@ void af_stream_set_playing(af_stream *s, int playing)
     if (s->sound == NULL) return;
 
     if (playing) {
-        /* Starting a sound that is already at its end plays nothing, so a
-           transport stopped and started again would go silent for the rest of
-           the file's life. Rewinding first makes that press play the file. */
         if (s->autorestart && af_at_end(s)) af_stream_seek_seconds(s, 0.0);
         if (!ma_sound_at_end(s->sound)) ma_sound_start(s->sound);
     } else {
