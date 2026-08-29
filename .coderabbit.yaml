@@ -1,0 +1,47 @@
+# CodeRabbit review settings. See https://docs.coderabbit.ai/guides/configure-coderabbit
+language: en-GB
+
+reviews:
+  # Substantive findings over style notes.
+  profile: chill
+  high_level_summary: true
+  poem: false
+  # CodeRabbit reviews as a reviewer rather than a commenter: it requests
+  # changes when it finds something and approves once that is resolved. An
+  # approving review is what main requires before it will merge, so a review
+  # that never ran -- rate limited, or the service down -- leaves the pull
+  # request unapproved and unmergeable, which is the point.
+  request_changes_workflow: true
+  # Nothing to say on a pull request with no reviewable change.
+  review_status: false
+  path_instructions:
+    - path: 'src/**/*.{c,cpp}'
+      instructions: |
+        A .c or .cpp file carries no comments. The bar is a hidden constraint
+        that no rename, refactor or test name could carry, and it is almost
+        never met - flag a comment that restates what the code already says.
+
+        Contracts are documented on the header instead, where the declaration
+        is.
+    - path: 'src/**'
+      instructions: |
+        This is a realtime audio external. Flag allocation, locking, file or
+        network access on a path reached from the perform routine. Setup,
+        dsp and message methods may allocate; perform may not.
+
+        Ownership must be plain: check that what a function returns is clearly
+        the caller's to free or clearly not, and that a resource acquired on
+        one path is released on every path out, including the failing ones.
+
+        The core carries no Pd header, so that the tests can have it without
+        one. Flag anything that would pull m_pd.h into it.
+    - path: 'tests/**'
+      instructions: |
+        A test must be able to fail. Flag one whose assertions would hold with
+        the behaviour it names removed, and one whose fixture does not vary
+        along the axis the test is about.
+    - path: 'CMakeLists.txt'
+      instructions: |
+        Dependencies are pinned to a commit, never a tag, and fetched rather
+        than vendored. A cache variable must let a caller point at a local
+        checkout instead.
