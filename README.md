@@ -6,7 +6,7 @@ A sound-file library for [Pure Data](https://puredata.info), built on
 | Object | Kind | Does |
 | --- | --- | --- |
 | `[af.info]` | control | reports sample rate, duration in seconds, channels and sample format from a file's header |
-| `[af.play~]` | signal | streams a file from disk: start/stop, looping, speed, seek, position |
+| `[af.play~]` | signal | streams a file from disk: start/stop, looping, speed, seek, gapless cue, position |
 
 Formats: WAV, AIFF/AIFC, RF64, W64, FLAC, MP3, and Vorbis where miniaudio's
 `extras/stb_vorbis.c` is present at build time.
@@ -67,6 +67,7 @@ count is mixed.
 | `autorestart <0/1>` | float | whether `play 1` rewinds a file that has reached its end; on by default |
 | `speed <f>` | float | playback rate; 1 is the file's own rate |
 | `pos <f>` | float | seek, in seconds from the start |
+| `cue <f> [<f> <array>...]` | seconds, pre-roll seconds, one array per channel | move to a new place without a gap, optionally handing over the audio before it; see below |
 | `getpos` | | report `pos` once |
 | `close` | | release the file |
 
@@ -75,6 +76,7 @@ count is mixed.
 | `info` | samplerate, duration in seconds, channels, format-symbol | after `open`, and on `info` |
 | `pos` | seconds | on `getpos` |
 | `eof` | | on reaching the end with looping off |
+| `cued` | t0 in seconds, cue point in seconds | when a cue has taken effect; the next block starts at the cue point |
 | `error` | symbol | any failure, with a short reason; also printed to the Pd console |
 
 `[openpanel]` goes through `[open $1(` here too, and a toggle through
@@ -90,7 +92,36 @@ Rules:
 - Negative speed and reverse playback are not supported.
 - Silence is output for 1-2 blocks whilst seek buffers
 - Buffer underflow outputs silence and reports `error underflow` once per stall
-  rather than once per block. 
+  rather than once per block.
+
+#### Cueing
+
+`pos` outputs silence until the new place is buffered. `cue` prepares the new
+place on a second stream while the current one keeps playing, then switches
+between two blocks:
+
+```pd
+[cue 12.5 0.05 left right(
+|
+[af.play~ 2]
+```
+
+- The current place plays until the new one is buffered. Then `cued <t0>
+  <seconds>` is output, and the next block starts at the cue point.
+- With a pre-roll, the `preroll` seconds of the file before the cue point are
+  written to the arrays, one per channel, before `cued` is output. Each array
+  has to hold `preroll` x Pd's sample rate / speed points; the pre-roll fills
+  them from the first point. `t0` is the file time of the first point. The
+  pre-roll and the stream after it are one continuous read of the file.
+- A pre-roll that would start before the file is padded at the front with
+  silence, and `t0` is negative. The pre-roll is at most 0.5 seconds of the
+  file, and at most 0.5 seconds of output at the current speed.
+- A cue replaces one that has not taken effect, and `pos`, `open` and `close`
+  cancel it. A cue does not start or stop playback: made while stopped, it
+  takes effect and `play 1` starts from the cue point.
+- `open` opens the file twice, the second time for the stream a cue
+  prepares, so a cue does not block.
+- A missing or too-short array reports `error array`.
 
 ## Building
 
@@ -116,6 +147,7 @@ alone does not provide: add `-DPD_LIBRARY=<path to pd.lib>`.
 | `PD_INCLUDE_DIR` | fetched | directory containing `m_pd.h` |
 | `PD_LIBRARY` | searched | `pd.lib`; Windows only |
 | `MINIAUDIO_INCLUDE_DIR` | fetched | directory containing `miniaudio.h` |
+| `MINIAUDIO_GIT_REPOSITORY` | jamiebullock/miniaudio | where miniaudio is fetched from |
 | `GREATEST_INCLUDE_DIR` | fetched | directory containing `greatest.h`; tests only |
 | `AUDIOFILE_USE_HOST_MINIAUDIO` | `OFF` | link against the miniaudio the host compiles |
 | `AUDIOFILE_HOST_MINIAUDIO_DEFINES` | empty | the `MA_NO_*` macros the host compiled it with |
@@ -157,6 +189,12 @@ that disagrees writes fields at the wrong offsets. That is not a link error, so
 cmake -S . -B build -DAUDIOFILE_USE_HOST_MINIAUDIO=ON \
   -DAUDIOFILE_HOST_MINIAUDIO_DEFINES="MA_NO_DEVICE_IO;MA_NO_GENERATION;MA_NO_ENCODING"
 ```
+
+`cue` needs a miniaudio that clears a sound's read-ahead and resampler when it
+seeks: upstream commit e47d760, after 0.11.26. Against an older one, a cue
+that reuses a stream hands over frames from the place it last played.
+
+miniaudio is fetched from a fork of upstream, at a commit of upstream's own.
 
 ## Testing
 

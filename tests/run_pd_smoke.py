@@ -29,6 +29,8 @@ EXPECTED = [
     "PLAY: eof",
     "MISSING: error nofile",
     "af.info: nofile",
+    "CUE: cued 0.25 0.3",
+    "CUEDATA: 0.5",
 ]
 
 # `PLAY: error` is here because `open ..., play 1` in one message once
@@ -36,6 +38,7 @@ EXPECTED = [
 UNEXPECTED = [
     "INFO: error",
     "PLAY: error",
+    "CUE: error",
     "couldn't create",
     "no method for",
 ]

@@ -1,4 +1,4 @@
-#N canvas 40 40 900 739 12;
+#N canvas 40 40 900 820 12;
 #X text 20 12 [af.play~] - play a sound file from disk;
 #X obj 30 120 bng 19 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000;
 #X text 58 121 pick a file;
@@ -25,7 +25,7 @@
 #X obj 30 290 *~ 0.2;
 #X obj 105 290 *~ 0.2;
 #X obj 30 330 dac~;
-#X obj 300 290 route info pos eof error;
+#X obj 300 290 route info pos eof error cued;
 #X obj 301 467 unpack f f f s;
 #X floatatom 301 507 8 0 0 0 - - - 0;
 #X floatatom 391 507 10 0 0 0 - - - 0;
@@ -41,8 +41,18 @@
 #X obj 423 324 print error;
 #X text 20 38 Streaming playback \, with start and stop \, looping \, variable speed \, seeking and position reporting. The creation argument is the number of signal outlets. Default: 2 A file with a different channel count is mixed to the output channels.;
 #X text 22 620 speed resamples: at speed 2 the file plays twice as fast and an octave higher. Negative speed is not supported. A file at another sample rate is resampled to Pd's rate.;
-#X text 22 676 A seek past the end clamps and reads as end of file. Errors carry a reason: nofile \, format \, noopen \, seek or underflow.;
+#X text 22 676 A seek past the end clamps and reads as end of file. Errors carry a reason: nofile \, format \, noopen \, seek \, underflow or array.;
 #X text 22 578 open and play 1 in one message is supported. Opening a second file replaces the first and stops playback.;
+#X floatatom 620 240 5 0 0 0 - - - 0;
+#X text 666 241 cue \, in seconds;
+#X msg 620 272 cue \$1 0.05 cue-l cue-r;
+#X obj 620 330 table cue-l 4096;
+#X obj 760 330 table cue-r 4096;
+#X obj 620 380 unpack f f;
+#X floatatom 620 410 8 0 0 0 - - - 0;
+#X floatatom 700 410 8 0 0 0 - - - 0;
+#X text 620 434 cued: t0 \, seconds;
+#X text 22 718 cue <seconds> [<preroll> <array>...] moves to a new place without a gap: the current place plays on until the new one is buffered \, and the next block starts from it. With a pre-roll \, the preroll seconds of the file before the cue point are first written to one array per channel. cued then reports t0 \, the file time of the arrays' first sample \, and the cue point. A seek \, open or close cancels a cue.;
 #X connect 1 0 3 0;
 #X connect 3 0 4 0;
 #X connect 4 0 22 0;
@@ -73,3 +83,8 @@
 #X connect 27 3 31 0;
 #X connect 33 0 34 0;
 #X connect 33 1 35 0;
+#X connect 44 0 46 0;
+#X connect 46 0 22 0;
+#X connect 26 4 49 0;
+#X connect 49 0 50 0;
+#X connect 49 1 51 0;
