@@ -1517,7 +1517,7 @@ TEST the_place_left_ending_before_a_cue_lands_is_not_an_end(void)
     af_info    info;
     float     *buf;
     double     t0, cued;
-    int        eofs = 0, i;
+    int        eofs = 0, ended = 0, i;
     size_t     got = 0;
 
     OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
@@ -1533,13 +1533,14 @@ TEST the_place_left_ending_before_a_cue_lands_is_not_an_end(void)
     for (i = 0; i < 2000; i++) {
         unsigned events;
 
-        af_stream_read(s, buf, 64);
+        if (af_stream_read(s, buf, 64) == 0) ended = 1;
         events = af_stream_read_events(s);
         if (events & AF_EVENT_EOF) eofs++;
         if (events & AF_EVENT_CUED) break;
         af_sleep_ms(1);
     }
     ASSERTm("the cue never became ready", i < 2000);
+    ASSERTm("the cue landed before the place left had run out", ended);
     ASSERT_EQ_FMT(0, eofs, "%d");
 
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));

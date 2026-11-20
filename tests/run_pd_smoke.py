@@ -30,12 +30,12 @@ EXPECTED = [
     "MISSING: error nofile",
     "af.info: nofile",
     "CUE: cued 0.25 0.3",
-    "CUEDATA: 0.5",
-    "CUEDATA: 0.484292",
+    "CUEFIRST: 0.5",
+    "CUELAST: 0.484292",
 ]
 
 # Matched as whole lines, since a number can be the start of another.
-WHOLE_LINES = {"CUE: cued 0.25 0.3", "CUEDATA: 0.5", "CUEDATA: 0.484292"}
+WHOLE_LINES = {"CUE: cued 0.25 0.3", "CUEFIRST: 0.5", "CUELAST: 0.484292"}
 
 # `PLAY: error` is here because `open ..., play 1` in one message once
 # reported a dropout before a frame had been delivered.

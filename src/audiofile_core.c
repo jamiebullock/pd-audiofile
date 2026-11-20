@@ -45,7 +45,6 @@ typedef struct {
 typedef struct {
     bool     waiting;
     bool     ready;
-    double   speed;
     double   seconds;
     double   t0;
     uint64_t zeros;
@@ -679,7 +678,6 @@ af_status af_stream_cue(af_stream *s, double seconds, double preroll)
     source      = (uint64_t)((double)cue.reads * speed + 0.5);
     cue.start   = (source <= cue_frame + AF_RESAMPLER_DELAY)
                 ? cue_frame + AF_RESAMPLER_DELAY - source : 0;
-    cue.speed   = speed;
     cue.seconds = seconds;
     cue.t0      = seconds - (double)cue.frames * speed / s->out_rate;
 
