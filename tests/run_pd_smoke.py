@@ -29,13 +29,20 @@ EXPECTED = [
     "PLAY: eof",
     "MISSING: error nofile",
     "af.info: nofile",
+    "CUE: cued 0.25 0.3",
+    "CUEFIRST: 0.5",
+    "CUELAST: 0.484292",
 ]
+
+# Matched as whole lines, since a number can be the start of another.
+WHOLE_LINES = {"CUE: cued 0.25 0.3", "CUEFIRST: 0.5", "CUELAST: 0.484292"}
 
 # `PLAY: error` is here because `open ..., play 1` in one message once
 # reported a dropout before a frame had been delivered.
 UNEXPECTED = [
     "INFO: error",
     "PLAY: error",
+    "CUE: error",
     "couldn't create",
     "no method for",
 ]
@@ -100,6 +107,7 @@ def main(argv):
         "-nogui",
         "-noaudio",
         "-stderr",
+        "-r", "44100",
         "-path", extdir,
         "-path", fixdir,
         "-lib", "audiofile",
@@ -130,8 +138,9 @@ def main(argv):
     print("checking the smoke patch's output:")
 
     failed = False
+    lines = set(line.strip() for line in log.splitlines())
     for wanted in EXPECTED:
-        if wanted in log:
+        if (wanted in lines) if wanted in WHOLE_LINES else (wanted in log):
             print("  ok    %s" % wanted)
         else:
             print("  FAIL  expected: %s" % wanted)

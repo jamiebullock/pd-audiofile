@@ -18,8 +18,17 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(FetchContent)
 
 set(PD_GIT_TAG        "0.55-2" CACHE STRING "Pure Data tag to fetch m_pd.h from")
-set(MINIAUDIO_GIT_TAG "9634bedb5b5a2ca38c1ee7108a9358a4e233f14d"
-    CACHE STRING "miniaudio commit to fetch (0.11.25)")
+set(MINIAUDIO_GIT_REPOSITORY "https://github.com/jamiebullock/miniaudio.git"
+    CACHE STRING "miniaudio repository to fetch from")
+set(AUDIOFILE_MINIAUDIO_PIN "e47d76006bbb609007e0b8f6dbc298d5ba5f8afd")
+set(MINIAUDIO_GIT_TAG "${AUDIOFILE_MINIAUDIO_PIN}"
+    CACHE STRING "miniaudio commit to fetch (0.11.26 and the dev fixes after it, to the reset of a sound's state on seek)")
+# A build directory configured before this pin keeps the old one cached, and
+# cue needs the seek reset it lacks.
+if(MINIAUDIO_GIT_TAG STREQUAL "9634bedb5b5a2ca38c1ee7108a9358a4e233f14d")
+    set(MINIAUDIO_GIT_TAG "${AUDIOFILE_MINIAUDIO_PIN}" CACHE STRING
+        "miniaudio commit to fetch (0.11.26 and the dev fixes after it, to the reset of a sound's state on seek)" FORCE)
+endif()
 set(GREATEST_GIT_TAG  "v1.5.0" CACHE STRING "greatest tag to fetch, for the tests")
 
 set(PD_INCLUDE_DIR        "" CACHE PATH   "Directory containing m_pd.h")
@@ -63,7 +72,7 @@ message(STATUS "Pd headers: ${PD_INCLUDE_DIR}")
 if(MINIAUDIO_INCLUDE_DIR STREQUAL "")
     message(STATUS "MINIAUDIO_INCLUDE_DIR not set: fetching miniaudio ${MINIAUDIO_GIT_TAG}")
     FetchContent_Declare(miniaudio
-        GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+        GIT_REPOSITORY ${MINIAUDIO_GIT_REPOSITORY}
         GIT_TAG        ${MINIAUDIO_GIT_TAG}
         SOURCE_SUBDIR  headers-only)
     FetchContent_MakeAvailable(miniaudio)

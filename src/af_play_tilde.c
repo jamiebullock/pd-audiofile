@@ -11,6 +11,7 @@
 #include "af_pdpath.h"
 #include "audiofile_core.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 #define AF_PLAY_MAX_CHANNELS 64
@@ -28,6 +29,11 @@ typedef struct _af_play {
     t_sample  **x_outvec;
     float      *x_interleaved;
     int         x_bufframes;
+
+    t_symbol  **x_cuearrays;
+    int         x_cuenarrays;
+    float      *x_cuebuf;
+    size_t      x_cuebufframes;
 } t_af_play;
 
 static void af_play_fail(t_af_play *x, const char *reason)
@@ -50,6 +56,60 @@ static void af_play_report_info(t_af_play *x, const af_info *info)
     outlet_anything(x->x_msgout, gensym("info"), 4, out);
 }
 
+static t_garray *af_play_find_array(t_symbol *name)
+{
+    return (t_garray *)pd_findbyclass(name, garray_class);
+}
+
+static bool af_play_fill_arrays(t_af_play *x, size_t frames)
+{
+    bool filled = true;
+    int  ch;
+
+    for (ch = 0; ch < x->x_cuenarrays; ch++) {
+        t_garray *array = af_play_find_array(x->x_cuearrays[ch]);
+        t_word   *vec;
+        int       size;
+        size_t    i;
+
+        if (array == NULL || !garray_getfloatwords(array, &size, &vec) ||
+            (size_t)size < frames)
+        {
+            filled = false;
+            continue;
+        }
+        for (i = 0; i < frames; i++) {
+            vec[i].w_float = (t_float)x->x_cuebuf[i * x->x_nch + ch];
+        }
+        garray_redraw(array);
+    }
+    return filled;
+}
+
+/* Every array is written before anything is output, since a receiver can
+ * answer with another cue that replaces them. */
+static void af_play_deliver_cue(t_af_play *x)
+{
+    size_t    frames = af_stream_cue_frames(x->x_stream);
+    bool      arrays = x->x_cuenarrays > 0 && frames <= x->x_cuebufframes;
+    bool      filled = true;
+    double    t0 = 0.0, seconds = 0.0;
+    af_status status;
+    t_atom    out[2];
+
+    status = af_stream_take_cue(x->x_stream, arrays ? x->x_cuebuf : NULL,
+                                &t0, &seconds);
+    if (status == AF_ERR_ARGS) return;
+    if (arrays) filled = af_play_fill_arrays(x, frames);
+
+    if (status != AF_OK) af_play_fail(x, af_status_string(status));
+    if (!filled) af_play_fail(x, "array");
+
+    SETFLOAT(&out[0], (t_float)t0);
+    SETFLOAT(&out[1], (t_float)seconds);
+    outlet_anything(x->x_msgout, gensym("cued"), 2, out);
+}
+
 static void af_play_tick(t_af_play *x)
 {
     unsigned events = af_stream_read_events(x->x_stream);
@@ -60,6 +120,9 @@ static void af_play_tick(t_af_play *x)
     if (events & AF_EVENT_EOF) {
         af_stream_set_playing(x->x_stream, 0);
         outlet_anything(x->x_msgout, gensym("eof"), 0, NULL);
+    }
+    if (events & AF_EVENT_CUED) {
+        af_play_deliver_cue(x);
     }
 }
 
@@ -130,6 +193,59 @@ static void af_play_pos(t_af_play *x, t_floatarg f)
 {
     af_status status = af_stream_seek_seconds(x->x_stream, (double)f);
     if (status != AF_OK) af_play_fail(x, af_status_string(status));
+}
+
+static void af_play_cue(t_af_play *x, t_symbol *sel, int argc, t_atom *argv)
+{
+    int       narrays = (argc > 2) ? argc - 2 : 0;
+    double    preroll = 0.0;
+    bool      no_room = false;
+    size_t    frames;
+    af_status status;
+    int       i;
+
+    (void)sel;
+    if (argc < 1 || argv[0].a_type != A_FLOAT ||
+        (argc > 1 && argv[1].a_type != A_FLOAT) ||
+        (narrays != 0 && narrays != x->x_nch))
+    {
+        af_play_fail(x, af_status_string(AF_ERR_ARGS));
+        return;
+    }
+    for (i = 0; i < narrays; i++) {
+        if (argv[2 + i].a_type != A_SYMBOL ||
+            af_play_find_array(argv[2 + i].a_w.w_symbol) == NULL)
+        {
+            af_play_fail(x, "array");
+            return;
+        }
+    }
+    if (argc > 1) preroll = (double)atom_getfloat(argv + 1);
+
+    status = af_stream_cue(x->x_stream, (double)atom_getfloat(argv), preroll);
+    if (status != AF_OK) {
+        af_play_fail(x, af_status_string(status));
+        return;
+    }
+
+    frames = af_stream_cue_frames(x->x_stream);
+    if (narrays > 0 && frames > x->x_cuebufframes) {
+        float *grown = (float *)resizebytes(x->x_cuebuf,
+            x->x_cuebufframes * x->x_nch * sizeof(float),
+            frames * x->x_nch * sizeof(float));
+
+        if (grown == NULL) {
+            no_room = true;
+            narrays = 0;
+        } else {
+            x->x_cuebuf       = grown;
+            x->x_cuebufframes = frames;
+        }
+    }
+
+    x->x_cuenarrays = narrays;
+    for (i = 0; i < narrays; i++) x->x_cuearrays[i] = argv[2 + i].a_w.w_symbol;
+    if (no_room) af_play_fail(x, af_status_string(AF_ERR_MEMORY));
 }
 
 static void af_play_getpos(t_af_play *x)
@@ -221,8 +337,9 @@ static void *af_play_new(t_floatarg fnch)
     x->x_bufframes   = sys_getblksize() > 64 ? sys_getblksize() : 64;
     x->x_interleaved = (float *)getbytes((size_t)x->x_bufframes * nch * sizeof(float));
     x->x_outvec      = (t_sample **)getbytes((size_t)nch * sizeof(t_sample *));
+    x->x_cuearrays   = (t_symbol **)getbytes((size_t)nch * sizeof(t_symbol *));
 
-    if (x->x_interleaved == NULL || x->x_outvec == NULL) {
+    if (x->x_interleaved == NULL || x->x_outvec == NULL || x->x_cuearrays == NULL) {
         pd_error(x, "af.play~: %s", af_status_string(AF_ERR_MEMORY));
         pd_free((t_pd *)x);
         return NULL;
@@ -248,6 +365,12 @@ static void af_play_free(t_af_play *x)
     if (x->x_outvec) {
         freebytes(x->x_outvec, (size_t)x->x_nch * sizeof(t_sample *));
     }
+    if (x->x_cuearrays) {
+        freebytes(x->x_cuearrays, (size_t)x->x_nch * sizeof(t_symbol *));
+    }
+    if (x->x_cuebuf) {
+        freebytes(x->x_cuebuf, x->x_cuebufframes * x->x_nch * sizeof(float));
+    }
 }
 
 void af_play_tilde_setup(void)
@@ -268,5 +391,6 @@ void af_play_tilde_setup(void)
                     gensym("autorestart"), A_FLOAT, 0);
     class_addmethod(af_play_class, (t_method)af_play_speed,  gensym("speed"),  A_FLOAT,  0);
     class_addmethod(af_play_class, (t_method)af_play_pos,    gensym("pos"),    A_FLOAT,  0);
+    class_addmethod(af_play_class, (t_method)af_play_cue,    gensym("cue"),    A_GIMME,  0);
     class_addmethod(af_play_class, (t_method)af_play_getpos, gensym("getpos"), A_NULL);
 }
