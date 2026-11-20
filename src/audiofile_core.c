@@ -659,9 +659,7 @@ af_status af_stream_cue(af_stream *s, double seconds, double preroll)
     cue_frame  = af_seconds_to_frames(s, seconds);
     cue.frames = (uint64_t)(preroll * s->out_rate / speed + 0.5);
 
-    /* Output frames that can be read before the cue point from the file's
-     * start, the resampler's history included. */
-    room = (uint64_t)((double)(cue_frame + AF_RESAMPLER_DELAY) / speed);
+    room =(uint64_t)((double)(cue_frame + AF_RESAMPLER_DELAY) / speed);
 
     if (room >= cue.frames + AF_CUE_WARMUP_FRAMES) {
         cue.discard = AF_CUE_WARMUP_FRAMES;

@@ -1089,12 +1089,12 @@ TEST a_cue_hands_over_the_preroll_and_continues_from_the_cue_point(void)
     }
 
     frames = af_stream_cue_frames(s);
-    ASSERT_EQ_FMT((size_t)CUE_PREROLL_FRAMES, frames, "%lu");
+    ASSERT_EQ_FMT((size_t)CUE_PREROLL_FRAMES, frames, "%zu");
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, joined, &t0, &cued));
     ASSERT_IN_RANGE(frames_to_seconds((double)(target - CUE_PREROLL_FRAMES)), t0, 1e-9);
     ASSERT_IN_RANGE(frames_to_seconds((double)target), cued, 1e-9);
 
-    ASSERT_EQ_FMT((size_t)512, af_stream_read(s, joined + frames, 512), "%lu");
+    ASSERT_EQ_FMT((size_t)512, af_stream_read(s, joined + frames, 512), "%zu");
 
     /* The pre-roll from its first frame, the join and the stream after it,
      * as one run of the file. */
@@ -1132,7 +1132,7 @@ TEST a_cue_reuses_a_voice_without_its_old_place(void)
         ASSERTm("the cue never became ready",
                 wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
         ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
-        ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%lu");
+        ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%zu");
 
         err = phase_error(buf, CUE_PREROLL_FRAMES + 256,
                           (double)(targets[i] - CUE_PREROLL_FRAMES), 1.0, &lag);
@@ -1169,7 +1169,7 @@ TEST a_cue_nearer_the_start_than_its_preroll_is_padded_with_silence(void)
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
     ASSERT_IN_RANGE(frames_to_seconds(500.0 - CUE_PREROLL_FRAMES), t0, 1e-9);
-    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%lu");
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%zu");
 
     for (i = 0; i < zeros; i++) {
         if (buf[i] != 0.0f) FAILm(msg("frame %lu before the file's start is %g",
@@ -1239,7 +1239,7 @@ TEST a_second_cue_replaces_the_first(void)
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
     ASSERT_IN_RANGE(frames_to_seconds(6007.0), cued, 1e-9);
-    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%lu");
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%zu");
 
     err = phase_error(buf, CUE_PREROLL_FRAMES + 256, 6007.0 - CUE_PREROLL_FRAMES,
                       1.0, &lag);
@@ -1274,7 +1274,7 @@ TEST a_seek_cancels_a_cue(void)
         af_sleep_ms(1);
     }
     ASSERT_EQ_FMT(0, cued_events, "%d");
-    ASSERT_EQ_FMT((size_t)0, af_stream_cue_frames(s), "%lu");
+    ASSERT_EQ_FMT((size_t)0, af_stream_cue_frames(s), "%zu");
     ASSERT_EQ(AF_ERR_ARGS, af_stream_take_cue(s, buf, &t0, &cued));
 
     af_stream_free(s);
@@ -1299,7 +1299,7 @@ TEST a_cue_made_while_stopped_lands_and_playing_starts_there(void)
     ASSERTm("the cue never became ready",
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
-    ASSERT_EQ_FMT((size_t)0, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 64), "%lu");
+    ASSERT_EQ_FMT((size_t)0, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 64), "%zu");
 
     af_stream_set_playing(s, 1);
     d = drain(s, buf + CUE_PREROLL_FRAMES, 512, 64, 1, 2000);
@@ -1333,7 +1333,7 @@ TEST a_cue_into_a_resampled_file_joins_the_preroll_to_the_stream(void)
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     frames = af_stream_cue_frames(s);
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
-    ASSERT_EQ_FMT((size_t)512, af_stream_read(s, buf + frames, 512), "%lu");
+    ASSERT_EQ_FMT((size_t)512, af_stream_read(s, buf + frames, 512), "%zu");
 
     /* The decoder's resampler restarts at a seek, with a fractional latency
      * of its own that every seek has. What the cue adds is that the pre-roll
@@ -1371,7 +1371,7 @@ TEST a_cue_refuses_what_it_cannot_do(void)
     ASSERT_EQ(AF_ERR_ARGS, af_stream_cue(s, 0.1, AF_CUE_PREROLL_MAX / 2.0 + 0.01));
     ASSERT_EQ(AF_OK, af_stream_cue(s, 0.1, AF_CUE_PREROLL_MAX / 2.0));
     af_stream_close(s);
-    ASSERT_EQ_FMT((size_t)0, af_stream_cue_frames(s), "%lu");
+    ASSERT_EQ_FMT((size_t)0, af_stream_cue_frames(s), "%zu");
     af_stream_free(s);
     PASS();
 }
@@ -1420,7 +1420,7 @@ TEST a_cue_reads_the_file_open_already(void)
     ASSERTm("the cue never became ready",
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
-    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%lu");
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + CUE_PREROLL_FRAMES, 256), "%zu");
 
     err = phase_error(buf, CUE_PREROLL_FRAMES + 256, 9031.0 - CUE_PREROLL_FRAMES,
                       1.0, &lag);
@@ -1452,9 +1452,9 @@ TEST a_cue_made_while_a_speed_change_waits_keeps_its_own_speed(void)
     ASSERTm("the cue never became ready",
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     frames = af_stream_cue_frames(s);
-    ASSERT_EQ_FMT((size_t)CUE_PREROLL_FRAMES, frames, "%lu");
+    ASSERT_EQ_FMT((size_t)CUE_PREROLL_FRAMES, frames, "%zu");
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
-    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + frames, 256), "%lu");
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + frames, 256), "%zu");
 
     err = phase_error(buf, frames, 9031.0 - CUE_PREROLL_FRAMES, 1.0, &lag);
     ASSERTm(msg("the pre-roll is off by %.6f at lag %d at the speed of the cue",
@@ -1499,7 +1499,7 @@ TEST a_cue_with_nothing_to_read_still_lands(void)
     ASSERTm("the cue never became ready",
             wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));
-    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf, 256), "%lu");
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf, 256), "%zu");
 
     /* The first frame after the resampler's history is the file's second. */
     err = phase_error(buf, 256, 1.0, 2.0, &lag);
@@ -1546,7 +1546,7 @@ TEST the_place_left_ending_before_a_cue_lands_is_not_an_end(void)
 
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));
     for (i = 0; i < 8; i++) got += af_stream_read(s, buf, 64);
-    ASSERT_EQ_FMT((size_t)512, got, "%lu");
+    ASSERT_EQ_FMT((size_t)512, got, "%zu");
     ASSERTm("no end reported once the cue has taken effect",
             !(af_stream_read_events(s) & AF_EVENT_EOF));
 
