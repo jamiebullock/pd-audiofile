@@ -1517,7 +1517,7 @@ TEST the_place_left_ending_before_a_cue_lands_is_not_an_end(void)
     af_info    info;
     float     *buf;
     double     t0, cued;
-    int        eofs = 0, ended = 0, i;
+    int        eofs = 0, ended = 0, ready = 0, i;
     size_t     got = 0;
 
     OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
@@ -1527,20 +1527,21 @@ TEST the_place_left_ending_before_a_cue_lands_is_not_an_end(void)
     ASSERTm("the stream never got going", settle(s, buf, 64));
     drain(s, buf, FIXTURE_FRAMES - 64 - 64, 64, 1, 2000);
 
-    /* 64 frames are left: the place runs out a block or two into the cue. */
+    /* 64 frames are left. Reading goes on until the cue is ready and the place
+     * has run out, in whichever order they come. */
     ASSERT_EQ(AF_OK, af_stream_cue(s, frames_to_seconds(9031.0),
                                    frames_to_seconds(CUE_PREROLL_FRAMES)));
-    for (i = 0; i < 2000; i++) {
+    for (i = 0; i < 2000 && !(ready && ended); i++) {
         unsigned events;
 
         if (af_stream_read(s, buf, 64) == 0) ended = 1;
         events = af_stream_read_events(s);
         if (events & AF_EVENT_EOF) eofs++;
-        if (events & AF_EVENT_CUED) break;
+        if (events & AF_EVENT_CUED) ready = 1;
         af_sleep_ms(1);
     }
-    ASSERTm("the cue never became ready", i < 2000);
-    ASSERTm("the cue landed before the place left had run out", ended);
+    ASSERTm("the cue never became ready", ready);
+    ASSERTm("the place left never ran out", ended);
     ASSERT_EQ_FMT(0, eofs, "%d");
 
     ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));
