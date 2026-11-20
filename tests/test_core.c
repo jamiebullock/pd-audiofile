@@ -1013,8 +1013,8 @@ static long wait_for_cue(af_stream *s, float *played, size_t capacity,
         size_t got = af_stream_read(s, to, block);
 
         if (to != scratch) kept += got;
-        if (af_stream_read_events(s) & AF_EVENT_CUED) return (long)kept;
         if (got < block) (*short_blocks)++;
+        if (af_stream_read_events(s) & AF_EVENT_CUED) return (long)kept;
         af_sleep_ms(1);
         if (++waited_ms > 2000) return -1;
     }
@@ -1033,6 +1033,7 @@ static double offset_error(const float *buf, size_t frames, double start,
 
     for (i = 0; i < frames; i++) {
         double err = fabs((double)buf[i] - expected_sample(start + (double)i * step));
+        if (!isfinite(err)) return INFINITY;
         if (err > worst) worst = err;
     }
     return worst;
@@ -1430,8 +1431,133 @@ TEST a_cue_reads_the_file_open_already(void)
     PASS();
 }
 
+TEST a_cue_made_while_a_speed_change_waits_keeps_its_own_speed(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    double     t0, cued, err;
+    int        short_blocks, lag = 99;
+    size_t     frames;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer(CUE_PREROLL_FRAMES + 512, 1);
+    af_stream_set_playing(s, 1);
+    ASSERTm("the stream never got going", settle(s, buf, 64));
+
+    ASSERT_EQ(AF_OK, af_stream_cue(s, frames_to_seconds(9031.0),
+                                   frames_to_seconds(CUE_PREROLL_FRAMES)));
+    af_stream_set_speed(s, 2.0);
+    ASSERTm("the cue never became ready",
+            wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
+    frames = af_stream_cue_frames(s);
+    ASSERT_EQ_FMT((size_t)CUE_PREROLL_FRAMES, frames, "%lu");
+    ASSERT_EQ(AF_OK, af_stream_take_cue(s, buf, &t0, &cued));
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf + frames, 256), "%lu");
+
+    err = phase_error(buf, frames, 9031.0 - CUE_PREROLL_FRAMES, 1.0, &lag);
+    ASSERTm(msg("the pre-roll is off by %.6f at lag %d at the speed of the cue",
+                err, lag), err < 1e-4 && lag == 0);
+
+    /* The resampler takes a few frames to move to the new ratio. */
+    err = phase_error(buf + frames + AF_PRIME, 256 - AF_PRIME,
+                      9031.0 + 2.0 * AF_PRIME, 2.0, &lag);
+    ASSERTm(msg("the stream is off by %.4f at lag %d at the new speed", err, lag),
+            err < 0.02);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+/* At speed 2 a cue to the first frame with no pre-roll has nothing before it
+ * to read. The first cue leaves the other voice somewhere else, so a seek
+ * that never happened would show. */
+TEST a_cue_with_nothing_to_read_still_lands(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    double     t0, cued, err;
+    int        short_blocks, lag = 99;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer(512, 1);
+    af_stream_set_playing(s, 1);
+    ASSERTm("the stream never got going", settle(s, buf, 64));
+    drain(s, buf, 512, 64, 1, 2000);
+    ASSERT_EQ(AF_OK, af_stream_cue(s, frames_to_seconds(15000.0), 0.0));
+    ASSERTm("the first cue never became ready",
+            wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
+    ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));
+    drain(s, buf, 512, 64, 1, 2000);
+
+    af_stream_set_speed(s, 2.0);
+    ASSERT_EQ(AF_OK, af_stream_cue(s, 0.0, 0.0));
+    ASSERTm("the cue never became ready",
+            wait_for_cue(s, NULL, 0, 64, &short_blocks) >= 0);
+    ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));
+    ASSERT_EQ_FMT((size_t)256, af_stream_read(s, buf, 256), "%lu");
+
+    /* The first frame after the resampler's history is the file's second. */
+    err = phase_error(buf, 256, 1.0, 2.0, &lag);
+    ASSERTm(msg("off by %.6f at lag %d: not from the start of the file", err, lag),
+            err < 1e-4 && lag == 0);
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
+TEST the_place_left_ending_before_a_cue_lands_is_not_an_end(void)
+{
+    af_stream *s;
+    af_info    info;
+    float     *buf;
+    double     t0, cued;
+    int        eofs = 0, i;
+    size_t     got = 0;
+
+    OPEN_FIXTURE(s, info, "sine_mono_44100_f32.wav", 1, FIXTURE_RATE);
+
+    buf = scratch_buffer(FIXTURE_FRAMES, 1);
+    af_stream_set_playing(s, 1);
+    ASSERTm("the stream never got going", settle(s, buf, 64));
+    drain(s, buf, FIXTURE_FRAMES - 64 - 64, 64, 1, 2000);
+
+    /* 64 frames are left: the place runs out a block or two into the cue. */
+    ASSERT_EQ(AF_OK, af_stream_cue(s, frames_to_seconds(9031.0),
+                                   frames_to_seconds(CUE_PREROLL_FRAMES)));
+    for (i = 0; i < 2000; i++) {
+        unsigned events;
+
+        af_stream_read(s, buf, 64);
+        events = af_stream_read_events(s);
+        if (events & AF_EVENT_EOF) eofs++;
+        if (events & AF_EVENT_CUED) break;
+        af_sleep_ms(1);
+    }
+    ASSERTm("the cue never became ready", i < 2000);
+    ASSERT_EQ_FMT(0, eofs, "%d");
+
+    ASSERT_EQ(AF_OK, af_stream_take_cue(s, NULL, &t0, &cued));
+    for (i = 0; i < 8; i++) got += af_stream_read(s, buf, 64);
+    ASSERT_EQ_FMT((size_t)512, got, "%lu");
+    ASSERTm("no end reported once the cue has taken effect",
+            !(af_stream_read_events(s) & AF_EVENT_EOF));
+
+    free(buf);
+    af_stream_free(s);
+    PASS();
+}
+
 SUITE(cueing)
 {
+    RUN_TEST(a_cue_made_while_a_speed_change_waits_keeps_its_own_speed);
+    RUN_TEST(a_cue_with_nothing_to_read_still_lands);
+    RUN_TEST(the_place_left_ending_before_a_cue_lands_is_not_an_end);
     RUN_TEST(a_cue_reads_the_file_open_already);
     RUN_TEST(a_cue_hands_over_the_preroll_and_continues_from_the_cue_point);
     RUN_TEST(a_cue_reuses_a_voice_without_its_old_place);

@@ -112,13 +112,21 @@ between two blocks:
   written to the arrays, one per channel, before `cued` is output. Each array
   has to hold `preroll` x Pd's sample rate / speed points; the pre-roll fills
   them from the first point. `t0` is the file time of the first point. The
-  pre-roll and the stream after it are one continuous read of the file.
+  pre-roll and the stream after it are one continuous read of the file. When
+  the file is resampled, the audio can sit up to two frames from `t0`: the
+  resampler's own delay, which `pos` has too.
 - A pre-roll that would start before the file is padded at the front with
   silence, and `t0` is negative. The pre-roll is at most 0.5 seconds of the
   file, and at most 0.5 seconds of output at the current speed.
 - A cue replaces one that has not taken effect, and `pos`, `open` and `close`
   cancel it. A cue does not start or stop playback: made while stopped, it
   takes effect and `play 1` starts from the cue point.
+- If the place being left reaches its end before the cue takes effect, it
+  gives silence and no `eof`, and playback goes on from the cue point.
+- `speed` while a cue is waiting applies from the cue point on; the pre-roll
+  is at the speed the cue was made at.
+- A cue is prepared as DSP runs, so `cued` comes only while DSP is on, whether
+  or not `[af.play~]` is playing.
 - `open` opens the file twice, the second time for the stream a cue
   prepares, so a cue does not block.
 - A missing or too-short array reports `error array`.

@@ -67,7 +67,9 @@ void af_stream_set_playing(af_stream *s, int playing);
 void af_stream_set_looping(af_stream *s, int looping);
 void af_stream_set_autorestart(af_stream *s, int autorestart);
 
-/* 1 is the file's own rate. Values <= 0 are ignored, the rest clamped. */
+/* 1 is the file's own rate. Values <= 0 are ignored, the rest clamped. A cue
+ * not yet taken keeps the speed it was made at; the place it moves to plays at
+ * this one. */
 void af_stream_set_speed(af_stream *s, double speed);
 
 /* Pd's sample rate. */
@@ -84,8 +86,10 @@ double af_stream_tell_seconds(af_stream *s);
  * AF_EVENT_CUED is raised once the new place is buffered, and
  * af_stream_take_cue then makes the switch. Past the end clamps, as a seek
  * does. A cue replaces one not yet taken, and a seek, open or close cancels
- * it. Blocks on nothing. The pre-roll is at most AF_CUE_PREROLL_MAX seconds
- * of the file, and as long again of output at the current speed. */
+ * it. The place being left plays on until then; if it reaches its end first it
+ * gives silence and no AF_EVENT_EOF. Blocks on nothing. The pre-roll is at
+ * most AF_CUE_PREROLL_MAX seconds of the file, and as long again of output at
+ * the current speed. */
 af_status af_stream_cue(af_stream *s, double seconds, double preroll);
 
 /* The pre-roll af_stream_take_cue will write, in frames at Pd's rate and the

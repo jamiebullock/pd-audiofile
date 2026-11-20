@@ -40,12 +40,12 @@ typedef struct {
     ma_sound *sound;
 } af_voice;
 
-/* Frame counts are output frames, except `start`, a decoded frame. The idle
- * voice delivers `reads` frames: `discard`, then the pre-roll after its
- * `zeros`. `got` of them are in the stream's cue buffer. */
+/* Frame counts are output frames, except `start`, a decoded frame. The idle voice delivers `reads` frames: `discard`, then the pre-roll
+ * after its `zeros`. `got` of them are in the stream's cue buffer. */
 typedef struct {
     bool     waiting;
     bool     ready;
+    double   speed;
     double   seconds;
     double   t0;
     uint64_t zeros;
@@ -431,7 +431,9 @@ af_status af_stream_open(af_stream *s, const char *path, af_info *info)
     char      *path_copy;
 
     if (s == NULL || path == NULL) return AF_ERR_ARGS;
-    if (!s->manager_ready) return AF_ERR_CONFIG;
+    if (!s->manager_ready || !s->voices[0].engine_ready || !s->voices[1].engine_ready) {
+        return AF_ERR_CONFIG;
+    }
 
     voice = &s->voices[s->current];
     idle  = af_idle_voice(s);
@@ -558,7 +560,9 @@ void af_stream_set_speed(af_stream *s, double speed)
 
     s->speed = speed;
     for (i = 0; i < 2; i++) {
-        if (s->voices[i].sound != NULL) {
+        bool cueing = i != s->current && (s->cue.waiting || s->cue.ready);
+
+        if (s->voices[i].sound != NULL && !cueing) {
             ma_sound_set_pitch(s->voices[i].sound, (float)speed);
         }
     }
@@ -668,10 +672,14 @@ af_status af_stream_cue(af_stream *s, double seconds, double preroll)
         cue.zeros = cue.frames - room;
     }
 
+    /* At least the resampler's history, or no read would apply the seek. */
+    if (cue.discard + cue.frames - cue.zeros == 0) cue.discard = 1;
+
     cue.reads   = cue.discard + cue.frames - cue.zeros;
     source      = (uint64_t)((double)cue.reads * speed + 0.5);
     cue.start   = (source <= cue_frame + AF_RESAMPLER_DELAY)
                 ? cue_frame + AF_RESAMPLER_DELAY - source : 0;
+    cue.speed   = speed;
     cue.seconds = seconds;
     cue.t0      = seconds - (double)cue.frames * speed / s->out_rate;
 
@@ -685,6 +693,7 @@ af_status af_stream_cue(af_stream *s, double seconds, double preroll)
 
     /* The seek, and the reset of the sound's read-ahead and resampler that
      * comes with it, happen when the idle engine is next read. */
+    ma_sound_set_pitch(idle->sound, (float)speed);
     ma_sound_start(idle->sound);
     if (ma_sound_seek_to_pcm_frame(idle->sound, cue.start) != MA_SUCCESS) {
         return AF_ERR_SEEK;
@@ -736,6 +745,7 @@ af_status af_stream_take_cue(af_stream *s, float *dst, double *t0,
                (size_t)(s->cue.reads - s->cue.discard) * channels * sizeof(float));
     }
 
+    ma_sound_set_pitch(idle->sound, (float)s->speed);
     if (!s->playing) ma_sound_stop(idle->sound);
     if (playing->sound != NULL) ma_sound_stop(playing->sound);
     s->current = s->current ^ 1u;
@@ -778,6 +788,7 @@ static void af_raise(af_stream *s, unsigned event)
 
 static void af_report_eof(af_stream *s)
 {
+    if (s->cue.waiting || s->cue.ready) return;
     if (!s->eof_reported) { s->eof_reported = true; af_raise(s, AF_EVENT_EOF); }
 }
 
@@ -791,7 +802,8 @@ static void af_report_underflow(af_stream *s)
 
 /* A stream answers reads with nothing until its seek has landed, so the
  * cursor stays at the cue's start and what the engine gives back is silence.
- * Once it moves, the frames read are the first of the cue. */
+ * Once it moves, the frames read are the first of the cue, and the seek has
+ * decoded two pages, more than the rest of any pre-roll. */
 static void af_poll_cue(af_stream *s)
 {
     af_voice *idle = af_idle_voice(s);

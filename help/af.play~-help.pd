@@ -46,13 +46,13 @@
 #X floatatom 620 240 5 0 0 0 - - - 0;
 #X text 666 241 cue \, in seconds;
 #X msg 620 272 cue \$1 0.05 cue-l cue-r;
-#X obj 620 330 table cue-l 4096;
-#X obj 760 330 table cue-r 4096;
+#X obj 620 330 table cue-l 16384;
+#X obj 760 330 table cue-r 16384;
 #X obj 620 380 unpack f f;
 #X floatatom 620 410 8 0 0 0 - - - 0;
 #X floatatom 700 410 8 0 0 0 - - - 0;
 #X text 620 434 cued: t0 \, seconds;
-#X text 22 718 cue <seconds> [<preroll> <array>...] moves to a new place without a gap: the current place plays on until the new one is buffered \, and the next block starts from it. With a pre-roll \, the preroll seconds of the file before the cue point are first written to one array per channel. cued then reports t0 \, the file time of the arrays' first sample \, and the cue point. A seek \, open or close cancels a cue.;
+#X text 22 718 cue <seconds> [<preroll> <array>...] moves to a new place without a gap: the current place plays on until the new one is buffered \, and the next block starts from it. With a pre-roll \, the preroll seconds of the file before the cue point are first written to one array per channel. cued then reports t0 \, the file time of the arrays' first sample \, and the cue point. The arrays have to hold the pre-roll: 0.05 seconds is 2400 points at 48 kHz and speed 1 \, and these hold 16384 . A seek \, open or close cancels a cue \, and cues are prepared while DSP runs.;
 #X connect 1 0 3 0;
 #X connect 3 0 4 0;
 #X connect 4 0 22 0;

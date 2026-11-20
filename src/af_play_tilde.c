@@ -61,9 +61,10 @@ static t_garray *af_play_find_array(t_symbol *name)
     return (t_garray *)pd_findbyclass(name, garray_class);
 }
 
-static void af_play_fill_arrays(t_af_play *x, size_t frames)
+static bool af_play_fill_arrays(t_af_play *x, size_t frames)
 {
-    int ch;
+    bool filled = true;
+    int  ch;
 
     for (ch = 0; ch < x->x_cuenarrays; ch++) {
         t_garray *array = af_play_find_array(x->x_cuearrays[ch]);
@@ -74,7 +75,7 @@ static void af_play_fill_arrays(t_af_play *x, size_t frames)
         if (array == NULL || !garray_getfloatwords(array, &size, &vec) ||
             (size_t)size < frames)
         {
-            af_play_fail(x, "array");
+            filled = false;
             continue;
         }
         for (i = 0; i < frames; i++) {
@@ -82,12 +83,16 @@ static void af_play_fill_arrays(t_af_play *x, size_t frames)
         }
         garray_redraw(array);
     }
+    return filled;
 }
 
+/* Every array is written before anything is output, since a receiver can
+ * answer with another cue that replaces them. */
 static void af_play_deliver_cue(t_af_play *x)
 {
     size_t    frames = af_stream_cue_frames(x->x_stream);
     bool      arrays = x->x_cuenarrays > 0 && frames <= x->x_cuebufframes;
+    bool      filled = true;
     double    t0 = 0.0, seconds = 0.0;
     af_status status;
     t_atom    out[2];
@@ -95,8 +100,10 @@ static void af_play_deliver_cue(t_af_play *x)
     status = af_stream_take_cue(x->x_stream, arrays ? x->x_cuebuf : NULL,
                                 &t0, &seconds);
     if (status == AF_ERR_ARGS) return;
+    if (arrays) filled = af_play_fill_arrays(x, frames);
+
     if (status != AF_OK) af_play_fail(x, af_status_string(status));
-    if (arrays) af_play_fill_arrays(x, frames);
+    if (!filled) af_play_fail(x, "array");
 
     SETFLOAT(&out[0], (t_float)t0);
     SETFLOAT(&out[1], (t_float)seconds);
@@ -192,6 +199,7 @@ static void af_play_cue(t_af_play *x, t_symbol *sel, int argc, t_atom *argv)
 {
     int       narrays = (argc > 2) ? argc - 2 : 0;
     double    preroll = 0.0;
+    bool      no_room = false;
     size_t    frames;
     af_status status;
     int       i;
@@ -227,7 +235,7 @@ static void af_play_cue(t_af_play *x, t_symbol *sel, int argc, t_atom *argv)
             frames * x->x_nch * sizeof(float));
 
         if (grown == NULL) {
-            af_play_fail(x, af_status_string(AF_ERR_MEMORY));
+            no_room = true;
             narrays = 0;
         } else {
             x->x_cuebuf       = grown;
@@ -237,6 +245,7 @@ static void af_play_cue(t_af_play *x, t_symbol *sel, int argc, t_atom *argv)
 
     x->x_cuenarrays = narrays;
     for (i = 0; i < narrays; i++) x->x_cuearrays[i] = argv[2 + i].a_w.w_symbol;
+    if (no_room) af_play_fail(x, af_status_string(AF_ERR_MEMORY));
 }
 
 static void af_play_getpos(t_af_play *x)
